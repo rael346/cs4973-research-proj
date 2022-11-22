@@ -5,7 +5,8 @@ from PIL import Image
 ANNOTATION = 'annotation'
 GALLERY = 'gallery'
 QUERY = 'query'
-APPAREL_TRAIN_ANNOTATION_PATH = '../dataset/apparel_train_annotation.csv'
+PATH_APPAREL_TRAIN_ANNOTATION = '../dataset/apparel_train_annotation.csv'
+PATH_QUERY_FILE = '../dataset/query_file_released.jsonl'
 
 def get_model(finetuned=False):
   model = SentenceTransformer('clip-ViT-B-32')
@@ -16,7 +17,7 @@ def get_model(finetuned=False):
 
 # Returns a list of 3-tuples containing 1 query feature vector (1 source image vector added to 1 feedback
 # vector), 1 target feature vector, and 1 non-target feature vector. All 3 feature vectors are of size 128
-def extract_features_training(annotation_df):
+def extract_features_annotation(annotation_df):
   feature_vectors = []
   model = get_model(finetuned=False)
 
@@ -38,6 +39,34 @@ def extract_features_training(annotation_df):
     feat_vec_triplet = (query_emb, target_emb, non_target_emb)
     feature_vectors.append(feat_vec_triplet)
   return feature_vectors
+
+# Returns a list of 2-tuples containing 1 query feature vector (1 source image vector added to 1 feedback
+# vector) and the list of candidate vectors. All feature vectors are of size 128
+def extract_features_query_file(query_df):
+  feature_vectors = []
+  model = get_model(finetuned=False)
+
+  for _index, row in query_df.iterrows():
+    # get data from dataframe
+    source_id = row['source_pid']
+    feedback1 = row['feedback1']
+    feedback2 = row['feedback2']
+    feedback3 = row['feedback3']
+    feedbacks = [feedback1, feedback2, feedback3]
+    candidates = row['candidates']
+    
+    candidate_embs = []
+    for candidate in candidates:
+      candidate_id = candidate['candidate_pid'] 
+      candidate_emb = embed_image(model, get_img_path(candidate_id, QUERY))
+      candidate_embs.append(candidate_emb)
+
+    # encode query (source image + 3 feedbacks), target image, non-target image
+    query_emb = embed_query(model, get_img_path(source_id, QUERY), feedbacks) 
+
+    feat_vec_couple = (query_emb, candidate_embs)
+    feature_vectors.append(feat_vec_couple)
+  return feature_vectors  
 
 # Returns the image file path given the image name
 # folder name should be either 'annotation', 'gallery', 'query'
@@ -71,17 +100,18 @@ def embed_query(model, image_path, feedbacks):
 
 if __name__ == "__main__":
   # load the annotations dataframe
-  annotation_df = pd.read_csv(APPAREL_TRAIN_ANNOTATION_PATH)
-  feature_vectors = extract_features_training(annotation_df.iloc[0:1])
+  annotation_df = pd.read_csv(PATH_APPAREL_TRAIN_ANNOTATION)
+  annotation_feature_vectors = extract_features_annotation(annotation_df.iloc[0:1])
 
-  # separate the triplets into separate lists
-  query_vectors = [f_v_triplet[0] for f_v_triplet in feature_vectors]
-  target_vectors = [f_v_triplet[1] for f_v_triplet in feature_vectors]
-  non_target_vectors = [f_v_triplet[2] for f_v_triplet in feature_vectors]
+  # load the query file dataframe
+  query_df = pd.read_json(PATH_QUERY_FILE, lines = True)
+  query_file_feature_vectors = extract_features_query_file(query_df.iloc[0:1])
 
-  print("Number of query vectors: " + str(len(query_vectors)))
-  print("Number of target vectors: " + str(len(target_vectors)))
-  print("Number of non target vectors: " + str(len(non_target_vectors)))
-  print("Size of feature vector: " + str(len(query_vectors[0])))
-  print("Meaningless right now, but cosine similarity of the first query vector and target vector: " + str(util.cos_sim(query_vectors[0], target_vectors[0])[0][0]))
-  print("Same thing but for query vector and nontarget vector: " + str(util.cos_sim(query_vectors[0], non_target_vectors[0])[0][0]))
+  # ANNOTATION components 
+  annotation_query_vectors = [f_v_triplet[0] for f_v_triplet in annotation_feature_vectors]
+  annotation_target_vectors = [f_v_triplet[1] for f_v_triplet in annotation_feature_vectors]
+  annotation_non_target_vectors = [f_v_triplet[2] for f_v_triplet in annotation_feature_vectors]
+
+  # QUERY FILE components 
+  query_file_query_vectors = [f_v_couple[0] for f_v_couple in query_file_feature_vectors]
+  query_file_candidate_vectors = [f_v_couple[1] for f_v_couple in query_file_feature_vectors]
