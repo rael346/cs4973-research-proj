@@ -1,4 +1,5 @@
-from sentence_transformers import util
+from numpy import dot
+from numpy.linalg import norm
 import datetime
 import pandas as pd
 from feature_extract import PATH_QUERY_FILE, extract_features_query_file
@@ -18,7 +19,10 @@ def evaluate(query_df):
         query_vector = f_v[0]           # remember, f_v is a 2-tuple
         candidate_vectors = f_v[1]
         for c_v_index, c_v in enumerate(candidate_vectors):
-            score = util.cos_sim(query_vector, c_v)
+            if query_vector is None or c_v is None:
+                score = 0               # the image was probably not found
+            else:
+                score = dot(query_vector, c_v)/(norm(query_vector)*norm(c_v))
             query_df_scored.iloc[index]['candidates'][c_v_index]['score'] = score
     return query_df_scored
 
@@ -26,4 +30,3 @@ if __name__ == "__main__":
     query_df = pd.read_json(PATH_QUERY_FILE, lines=True)
     scored = evaluate(query_df)
     scored.to_json(path_or_buf=PATH_RESULTS_SAVE, orient='records', lines=True)
-    

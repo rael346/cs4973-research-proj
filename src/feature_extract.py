@@ -1,12 +1,14 @@
 import pandas as pd
 from sentence_transformers import SentenceTransformer, util
 from PIL import Image
+import os
 
 ANNOTATION = 'annotation'
 GALLERY = 'gallery'
 QUERY = 'query'
 PATH_APPAREL_TRAIN_ANNOTATION = '../dataset/apparel_train_annotation.csv'
 PATH_QUERY_FILE = '../dataset/query_file_released.jsonl'
+num_images_not_found = 0
 
 def get_model(finetuned=False):
   model = SentenceTransformer('clip-ViT-B-32')
@@ -74,13 +76,20 @@ def get_img_path(image_name, folder_name):
   assert(isinstance(image_name, str))
   assert(isinstance(folder_name, str))
   assert(folder_name in {'annotation', 'gallery', 'query'})
-  return '../images/' + str(folder_name) +  '/' + image_name + '.jpg'
+  path = '../images/' + str(folder_name) +  '/' + image_name + '.jpg'
+  return path
 
 # Encode image using sentence transformer model into 128-dimensional embedding
 def embed_image(model, image_path):
-  emb = model.encode(Image.open(image_path))    # encoded as 512 dimensional
-  size_128_emb = emb[0:emb.size:4]    # 'scale' down by taking every 4th value (for now)
-  return size_128_emb
+  if os.path.exists(image_path):
+    emb = model.encode(Image.open(image_path))    # encoded as 512 dimensional
+    size_128_emb = emb[0:emb.size:4]    # 'scale' down by taking every 4th value (for now)
+    return size_128_emb  
+  else:
+    global num_images_not_found
+    num_images_not_found+=1
+    print(image_path + ' was of ' + str(num_images_not_found) + ' images not found')
+    return None         # image could not be found
 
 # Encode text feedbacks using sentence transformer model into 128-dimensional embedding
 def embed_text(model, text):
@@ -91,6 +100,8 @@ def embed_text(model, text):
 def embed_query(model, image_path, feedbacks):
   assert(len(feedbacks) == 3)
   src_emb = embed_image(model, image_path)
+  if src_emb is None:       # src_emb image_path was not found
+      return None
   # we simply add feedback embedding vectors (for now)
   text_emb = embed_text(model, feedbacks[0]) + embed_text(model, feedbacks[1]) + embed_text(model, feedbacks[2]) 
   # we simply add source and text vectors to get query embedding (for now)
