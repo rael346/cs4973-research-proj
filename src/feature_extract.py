@@ -85,7 +85,7 @@ def get_img_path(image_name, folder_name):
     assert (isinstance(image_name, str))
     assert (isinstance(folder_name, str))
     assert (folder_name in {'annotation', 'gallery', 'query'})
-    path = '../images/' + str(folder_name) + '/' + image_name + '.jpg'
+    path = './images/' + str(folder_name) + '/' + image_name + '.jpg'
     return path
 
 # Encode image using sentence transformer model into 128-dimensional embedding
