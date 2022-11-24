@@ -3,6 +3,9 @@ from sentence_transformers import SentenceTransformer, util
 from PIL import Image
 import os
 import torch
+from numpy import dot
+from numpy.linalg import norm
+import datetime
 
 ANNOTATION = 'annotation'
 GALLERY = 'gallery'
@@ -106,47 +109,90 @@ def embed_image(model: SentenceTransformer, image_path: str, scale_down: bool):
               str(num_images_not_found) + ' images not found')
         return None         # image could not be found
 
-# Encode text feedbacks using sentence transformer model into 128-dimensional embedding
-
 
 def embed_text(model, text):
-    emb = model.encode(text)            # encoded as 512 dimensional
+    emb = model.encode(text)  # encoded as 512 dimensional
     # 'scale' down by taking every 4th value (for now)
     size_128_emb = emb[0:emb.size:4]
     return size_128_emb
 
 
 def embed_query(model: SentenceTransformer, image_path: str, feedbacks: list[str]):
-    assert (len(feedbacks) == 3)
     src_emb = embed_image(model, image_path, False)
     if src_emb is None:       # src_emb image_path was not found
         return None
     # we simply add feedback embedding vectors (for now)
-    # text_emb = embed_text(model, feedbacks[0]) + embed_text(
-    #     model, feedbacks[1]) + embed_text(model, feedbacks[2])
     text_emb = sum(model.encode(feedbacks))
     # we simply add source and text vectors to get query embedding (for now)
     query_emb = src_emb + text_emb
     return query_emb
 
 
+def get_img_emb(model: SentenceTransformer, path: str) -> dict[str, torch.Tensor]:
+    img_names = os.listdir(path)
+
+    img_embs = model.encode([Image.open(path + "/" + name)
+                            for name in img_names], show_progress_bar=True)
+
+    img_emb_dict = {img_name: img_emb for img_name,
+                    img_emb in zip(img_names, img_embs)}
+
+    return img_emb_dict
+
+
+def get_feedback_emb_from_query(model: SentenceTransformer):
+    query_df = pd.read_json(PATH_QUERY_FILE, lines=True)
+    feedbacks = []
+    source_pids = []
+    for _, row in query_df.iterrows():
+        source_pids.append(row['source_pid'])
+        feedbacks.append(row['feedback1'])
+        feedbacks.append(row['feedback2'])
+        feedbacks.append(row['feedback3'])
+    feedback_embs = model.encode(feedbacks, show_progress_bar=True)
+
+    feedback_emb_dict = {}
+    for i, pid in enumerate(source_pids):
+        feedback1 = feedback_embs[3 * i]
+        feedback2 = feedback_embs[3 * i + 1]
+        feedback3 = feedback_embs[3 * i + 2]
+
+        feedback_emb = feedback1 + feedback2 + feedback3
+        feedback_emb_dict[pid] = feedback_emb
+
+    return feedback_emb_dict
+
+
+def evaluate(path: str, model: SentenceTransformer):
+    query_df = pd.read_json(path, lines=True)
+    query_df_scored = query_df.copy(deep=True)
+    img_embs = get_img_emb(model, "images/query")
+    feedback_embs = get_feedback_emb_from_query(model)
+
+    for i_row, row in query_df.iterrows():
+        source_pid = row["source_pid"]
+        source_img_emb = img_embs[source_pid]
+        feedback_emb = feedback_embs[source_pid]
+        source_emb = source_img_emb + feedback_emb
+
+        for i_c, c in enumerate(row["candidates"]):
+            c_pid = c["candidate_pid"]
+            c_emb = img_embs.get(c_pid, None)
+            if c_emb:
+                score = util.cos_sim(source_emb, c_emb).item()
+            else:
+                score = 0
+
+            query_df_scored.iloc[i_row]['candidates'][i_c]['score'] = score
+
+    return query_df_scored
+
+
 if __name__ == "__main__":
-    # load the annotations dataframe
-    # annotation_df = pd.read_csv(PATH_APPAREL_TRAIN_ANNOTATION)
-    # annotation_feature_vectors = extract_features_annotation(annotation_df.iloc[0:1])
-
-    # load the query file dataframe
-
-    # query_file_feature_vectors = extract_features_query_file(query_df.iloc[0:1])
-
-    # ANNOTATION components
-    # annotation_query_vectors = [f_v_triplet[0] for f_v_triplet in annotation_feature_vectors]
-    # annotation_target_vectors = [f_v_triplet[1] for f_v_triplet in annotation_feature_vectors]
-    # annotation_non_target_vectors = [f_v_triplet[2] for f_v_triplet in annotation_feature_vectors]
-
-    # QUERY FILE components
-    # query_file_query_vectors = [f_v_couple[0] for f_v_couple in query_file_feature_vectors]
-    # query_file_candidate_vectors = [f_v_couple[1] for f_v_couple in query_file_feature_vectors]
-    model = get_model()
-    result = extract_features_query_file(PATH_QUERY_FILE, model)
-    print(result)
+    model = SentenceTransformer('clip-ViT-B-32')
+    PATH_RESULTS_SAVE = './results/scored_query_file' + \
+        datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + '.jsonl'
+    # img_embs = get_img_emb(model, "images/query")
+    # feedback_embs = get_feedback_emb_from_query()
+    scored = evaluate(PATH_QUERY_FILE, model)
+    scored.to_json(path_or_buf=PATH_RESULTS_SAVE, orient='records', lines=True)
