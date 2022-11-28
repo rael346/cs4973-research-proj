@@ -12,6 +12,7 @@ GALLERY = 'gallery'
 QUERY = 'query'
 PATH_APPAREL_TRAIN_ANNOTATION = './dataset/apparel_train_annotation.csv'
 PATH_QUERY_FILE = './dataset/query_file_released.jsonl'
+IMAGE_BATCH_SIZE = 1024
 num_images_not_found = 0
 
 
@@ -130,12 +131,15 @@ def embed_query(model: SentenceTransformer, image_path: str, feedbacks: list[str
 
 def get_img_emb(model: SentenceTransformer, path: str) -> dict[str, torch.Tensor]:
     img_names = os.listdir(path)
+    img_emb_dict = {}
 
-    img_embs = model.encode([Image.open(path + "/" + name)
-                            for name in img_names], show_progress_bar=True)
+    for i in range(0, len(img_names), IMAGE_BATCH_SIZE):
+        batch_img = img_names[i: i + IMAGE_BATCH_SIZE]
+        img_embs = model.encode([Image.open(path + "/" + name)
+                                for name in batch_img], show_progress_bar=True)
 
-    img_emb_dict = {img_name: img_emb for img_name,
-                    img_emb in zip(img_names, img_embs)}
+        img_emb_dict.update({img_name: img_emb for img_name,
+                             img_emb in zip(batch_img, img_embs)})
 
     return img_emb_dict
 
@@ -167,6 +171,7 @@ def evaluate(path: str, model: SentenceTransformer):
     query_df = pd.read_json(path, lines=True)
     query_df_scored = query_df.copy(deep=True)
     img_embs = get_img_emb(model, "images/query")
+    print("IMG EMBS LENGTH:", len(img_embs))
     feedback_embs = get_feedback_emb_from_query(model)
 
     for i_row, row in query_df.iterrows():
