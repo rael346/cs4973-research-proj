@@ -6,6 +6,8 @@ import torch
 from numpy import dot
 from numpy.linalg import norm
 import datetime
+import math
+from tqdm import tqdm
 
 ANNOTATION = 'annotation'
 GALLERY = 'gallery'
@@ -133,7 +135,9 @@ def get_img_emb(model: SentenceTransformer, path: str) -> dict[str, torch.Tensor
     img_names = os.listdir(path)
     img_emb_dict = {}
 
+    num_batch = math.ceil(len(img_names) / IMAGE_BATCH_SIZE)
     for i in range(0, len(img_names), IMAGE_BATCH_SIZE):
+        print("BATCH", i + 1, "OF", num_batch)
         batch_img = img_names[i: i + IMAGE_BATCH_SIZE]
         img_embs = model.encode([Image.open(path + "/" + name)
                                 for name in batch_img], show_progress_bar=True)
@@ -174,16 +178,30 @@ def evaluate(path: str, model: SentenceTransformer):
     print("IMG EMBS LENGTH:", len(img_embs))
     feedback_embs = get_feedback_emb_from_query(model)
 
-    for i_row, row in query_df.iterrows():
+    missing_img_count = 0
+
+    for i_row, row in tqdm(query_df.iterrows()):
         source_pid = row["source_pid"]
-        source_img_emb = img_embs[source_pid]
+        source_img_emb = img_embs.get(source_pid, None)
+
+        if not source_img_emb:
+            missing_img_count += 1
+            print("Missing source image", source_pid,
+                  ", current count:", missing_img_count)
+
         feedback_emb = feedback_embs[source_pid]
-        source_emb = source_img_emb + feedback_emb
+        source_emb = source_img_emb + feedback_emb if source_img_emb else None
 
         for i_c, c in enumerate(row["candidates"]):
             c_pid = c["candidate_pid"]
             c_emb = img_embs.get(c_pid, None)
-            if c_emb:
+
+            if not c_emb:
+                missing_img_count += 1
+                print("Missing candidate pid image", c_pid,
+                      ", current count:", missing_img_count)
+
+            if c_emb and source_emb:
                 score = util.cos_sim(source_emb, c_emb).item()
             else:
                 score = 0
