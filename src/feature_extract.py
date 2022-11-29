@@ -188,15 +188,16 @@ def evaluate(path: str, model: SentenceTransformer):
             missing_img_count += 1
             print("Missing source image", source_pid,
                   ", current count:", missing_img_count)
-
-        feedback_emb = feedback_embs[source_pid]
-        source_emb = source_img_emb + feedback_emb if source_img_emb else None
+            source_emb = None
+        else:
+            feedback_emb = feedback_embs[source_pid]
+            source_emb = source_img_emb + feedback_emb
 
         for i_c, c in enumerate(row["candidates"]):
             c_pid = c["candidate_pid"]
             c_emb = img_embs.get(c_pid, None)
 
-            if c_emb == None:
+            if c_emb is None:
                 missing_img_count += 1
                 print("Missing candidate pid image", c_pid,
                       ", current count:", missing_img_count)
@@ -213,7 +214,10 @@ def evaluate(path: str, model: SentenceTransformer):
 
 if __name__ == "__main__":
     model = SentenceTransformer('clip-ViT-B-32')
-    PATH_RESULTS_SAVE = './results/scored_query_file' + \
-        datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + '.jsonl'
-    scored = evaluate(PATH_QUERY_FILE, model)
-    scored.to_json(path_or_buf=PATH_RESULTS_SAVE, orient='records', lines=True)
+    # PATH_RESULTS_SAVE = './results/scored_query_file' + \
+    #     datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + '.jsonl'
+    # scored = evaluate(PATH_QUERY_FILE, model)
+    # scored.to_json(path_or_buf=PATH_RESULTS_SAVE, orient='records', lines=True)
+
+    img_embs = get_img_emb(model, "images/query")
+    print(img_embs["B1cy1Ci8XIS"] is None)
