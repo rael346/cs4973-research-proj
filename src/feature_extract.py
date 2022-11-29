@@ -8,6 +8,7 @@ from numpy.linalg import norm
 import datetime
 import math
 from tqdm import tqdm
+import json
 
 ANNOTATION = 'annotation'
 GALLERY = 'gallery'
@@ -175,6 +176,10 @@ def evaluate(path: str, model: SentenceTransformer):
     query_df = pd.read_json(path, lines=True)
     query_df_scored = query_df.copy(deep=True)
     img_embs = get_img_emb(model, "images/query")
+
+    with open("results/query/img_embs.jsonl", "w") as outfile:
+        json.dump(img_embs, outfile)
+
     print("IMG EMBS LENGTH:", len(img_embs))
     feedback_embs = get_feedback_emb_from_query(model)
 
@@ -214,10 +219,7 @@ def evaluate(path: str, model: SentenceTransformer):
 
 if __name__ == "__main__":
     model = SentenceTransformer('clip-ViT-B-32')
-    # PATH_RESULTS_SAVE = './results/scored_query_file' + \
-    #     datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + '.jsonl'
-    # scored = evaluate(PATH_QUERY_FILE, model)
-    # scored.to_json(path_or_buf=PATH_RESULTS_SAVE, orient='records', lines=True)
-
-    img_embs = get_img_emb(model, "images/query")
-    print(img_embs["B1cy1Ci8XIS"] is None)
+    PATH_RESULTS_SAVE = './results/scored_query_file' + \
+        datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + '.jsonl'
+    scored = evaluate(PATH_QUERY_FILE, model)
+    scored.to_json(path_or_buf=PATH_RESULTS_SAVE, orient='records', lines=True)
