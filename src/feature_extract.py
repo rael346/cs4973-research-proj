@@ -14,7 +14,7 @@ GALLERY = 'gallery'
 QUERY = 'query'
 PATH_APPAREL_TRAIN_ANNOTATION = './dataset/apparel_train_annotation.csv'
 PATH_QUERY_FILE = './dataset/query_file_released.jsonl'
-IMAGE_BATCH_SIZE = 1024
+IMAGE_BATCH_SIZE = 3072
 num_images_not_found = 0
 
 
@@ -137,7 +137,7 @@ def get_img_emb(model: SentenceTransformer, path: str) -> dict[str, torch.Tensor
 
     num_batch = math.ceil(len(img_names) / IMAGE_BATCH_SIZE)
     for i in range(0, len(img_names), IMAGE_BATCH_SIZE):
-        print("BATCH", i // IMAGE_BATCH_SIZE, "OF", num_batch)
+        print("BATCH", i // IMAGE_BATCH_SIZE + 1, "OF", num_batch)
         batch_img = img_names[i: i + IMAGE_BATCH_SIZE]
         img_embs = model.encode([Image.open(path + "/" + name)
                                 for name in batch_img], show_progress_bar=True)
@@ -184,7 +184,7 @@ def evaluate(path: str, model: SentenceTransformer):
         source_pid = row["source_pid"]
         source_img_emb = img_embs.get(source_pid, None)
 
-        if not source_img_emb:
+        if source_img_emb == None:
             missing_img_count += 1
             print("Missing source image", source_pid,
                   ", current count:", missing_img_count)
@@ -196,15 +196,15 @@ def evaluate(path: str, model: SentenceTransformer):
             c_pid = c["candidate_pid"]
             c_emb = img_embs.get(c_pid, None)
 
-            if not c_emb:
+            if c_emb == None:
                 missing_img_count += 1
                 print("Missing candidate pid image", c_pid,
                       ", current count:", missing_img_count)
 
-            if c_emb and source_emb:
-                score = util.cos_sim(source_emb, c_emb).item()
-            else:
+            if c_emb == None or source_emb == None:
                 score = 0
+            else:
+                score = util.cos_sim(source_emb, c_emb).item()
 
             query_df_scored.iloc[i_row]['candidates'][i_c]['score'] = score
 
@@ -213,7 +213,6 @@ def evaluate(path: str, model: SentenceTransformer):
 
 if __name__ == "__main__":
     model = SentenceTransformer('clip-ViT-B-32')
-    img_embs = get_img_emb(model, "images/query")
     PATH_RESULTS_SAVE = './results/scored_query_file' + \
         datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + '.jsonl'
     scored = evaluate(PATH_QUERY_FILE, model)
