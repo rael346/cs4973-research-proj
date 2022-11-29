@@ -143,10 +143,16 @@ def get_img_emb(model: SentenceTransformer, path: str) -> dict[str, torch.Tensor
         img_embs = model.encode([Image.open(path + "/" + name)
                                 for name in batch_img], show_progress_bar=True)
 
-        img_emb_dict.update({img_name.split(".")[0]: img_emb for img_name,
+        img_emb_dict.update({img_name.split(".")[0]: img_emb.tolist() for img_name,
                              img_emb in zip(batch_img, img_embs)})
 
     return img_emb_dict
+
+
+def output_img_emb(model: SentenceTransformer, path: str, output_path: str):
+    img_embs = get_img_emb(model, path)
+    with open(output_path, "w") as outfile:
+        json.dump(img_embs, outfile)
 
 
 def get_feedback_emb_from_query(model: SentenceTransformer):
@@ -172,15 +178,11 @@ def get_feedback_emb_from_query(model: SentenceTransformer):
     return feedback_emb_dict
 
 
-def evaluate(path: str, model: SentenceTransformer):
-    query_df = pd.read_json(path, lines=True)
+def evaluate(model: SentenceTransformer, query_json_path: str, img_emb_json_path: str):
+    query_df = pd.read_json(query_json_path, lines=True)
     query_df_scored = query_df.copy(deep=True)
-    img_embs = get_img_emb(model, "images/query")
+    img_embs = pd.read_json(img_emb_json_path, lines=True)
 
-    with open("results/query/img_embs.jsonl", "w") as outfile:
-        json.dump(img_embs, outfile)
-
-    print("IMG EMBS LENGTH:", len(img_embs))
     feedback_embs = get_feedback_emb_from_query(model)
 
     missing_img_count = 0
@@ -196,6 +198,7 @@ def evaluate(path: str, model: SentenceTransformer):
             source_emb = None
         else:
             feedback_emb = feedback_embs[source_pid]
+            source_img_emb = torch.tensor(source_img_emb)
             source_emb = source_img_emb + feedback_emb
 
         for i_c, c in enumerate(row["candidates"]):
@@ -219,7 +222,12 @@ def evaluate(path: str, model: SentenceTransformer):
 
 if __name__ == "__main__":
     model = SentenceTransformer('clip-ViT-B-32')
+    IMG_EMBS_PATH = "results/query/img_embs.jsonl"
+    if not os.path.exists(IMG_EMBS_PATH):
+        output_img_emb(model, "images/query/", IMG_EMBS_PATH)
+
+    scored = evaluate(model, PATH_QUERY_FILE, IMG_EMBS_PATH)
+
     PATH_RESULTS_SAVE = './results/scored_query_file' + \
         datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + '.jsonl'
-    scored = evaluate(PATH_QUERY_FILE, model)
     scored.to_json(path_or_buf=PATH_RESULTS_SAVE, orient='records', lines=True)
