@@ -137,12 +137,12 @@ def get_img_emb(model: SentenceTransformer, path: str) -> dict[str, torch.Tensor
 
     num_batch = math.ceil(len(img_names) / IMAGE_BATCH_SIZE)
     for i in range(0, len(img_names), IMAGE_BATCH_SIZE):
-        print("BATCH", i + 1, "OF", num_batch)
+        print("BATCH", i // IMAGE_BATCH_SIZE, "OF", num_batch)
         batch_img = img_names[i: i + IMAGE_BATCH_SIZE]
         img_embs = model.encode([Image.open(path + "/" + name)
                                 for name in batch_img], show_progress_bar=True)
 
-        img_emb_dict.update({img_name: img_emb for img_name,
+        img_emb_dict.update({img_name.split(".")[0]: img_emb for img_name,
                              img_emb in zip(batch_img, img_embs)})
 
     return img_emb_dict
@@ -213,9 +213,8 @@ def evaluate(path: str, model: SentenceTransformer):
 
 if __name__ == "__main__":
     model = SentenceTransformer('clip-ViT-B-32')
+    img_embs = get_img_emb(model, "images/query")
     PATH_RESULTS_SAVE = './results/scored_query_file' + \
         datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + '.jsonl'
-    # img_embs = get_img_emb(model, "images/query")
-    # feedback_embs = get_feedback_emb_from_query()
     scored = evaluate(PATH_QUERY_FILE, model)
     scored.to_json(path_or_buf=PATH_RESULTS_SAVE, orient='records', lines=True)
