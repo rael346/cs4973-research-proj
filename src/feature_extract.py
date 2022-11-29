@@ -184,7 +184,7 @@ def evaluate(path: str, model: SentenceTransformer):
         source_pid = row["source_pid"]
         source_img_emb = img_embs.get(source_pid, None)
 
-        if source_img_emb == None:
+        if source_img_emb is None:
             missing_img_count += 1
             print("Missing source image", source_pid,
                   ", current count:", missing_img_count)
@@ -201,7 +201,7 @@ def evaluate(path: str, model: SentenceTransformer):
                 print("Missing candidate pid image", c_pid,
                       ", current count:", missing_img_count)
 
-            if c_emb == None or source_emb == None:
+            if c_emb is None or source_emb is None:
                 score = 0
             else:
                 score = util.cos_sim(source_emb, c_emb).item()
