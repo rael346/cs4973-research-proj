@@ -13,15 +13,15 @@ PATH_QUERY_FILE = './dataset/query_file_released.jsonl'
 IMAGE_BATCH_SIZE = 3072
 
 
-def get_img_emb(model: SentenceTransformer, path: str) -> dict[str, torch.Tensor]:
-    img_names = os.listdir(path)
+def get_img_emb(model: SentenceTransformer, img_path: str) -> dict[str, torch.Tensor]:
+    img_names = os.listdir(img_path)
     img_emb_dict = {}
 
     num_batch = math.ceil(len(img_names) / IMAGE_BATCH_SIZE)
     for i in range(0, len(img_names), IMAGE_BATCH_SIZE):
         print("BATCH", i // IMAGE_BATCH_SIZE + 1, "OF", num_batch)
         batch_img = img_names[i: i + IMAGE_BATCH_SIZE]
-        img_embs = model.encode([Image.open(path + "/" + name)
+        img_embs = model.encode([Image.open(img_path + "/" + name)
                                 for name in batch_img], show_progress_bar=True)
 
         img_emb_dict.update({img_name.split(".")[0]: img_emb.tolist() for img_name,
@@ -36,8 +36,8 @@ def output_img_emb(model: SentenceTransformer, path: str, output_path: str):
         json.dump(img_embs, outfile)
 
 
-def get_feedback_emb_from_query(model: SentenceTransformer):
-    query_df = pd.read_json(PATH_QUERY_FILE, lines=True)
+def get_feedback_emb_from_query(model: SentenceTransformer, query_path: str):
+    query_df = pd.read_json(query_path, lines=True)
     feedbacks = []
     source_pids = []
     for _, row in query_df.iterrows():
@@ -59,24 +59,26 @@ def get_feedback_emb_from_query(model: SentenceTransformer):
     return feedback_emb_dict
 
 
-def evaluate(model: SentenceTransformer, query_json_path: str, img_emb_json_path: str):
+def evaluate_query(model: SentenceTransformer, query_json_path: str, img_emb_json_path: str, output_path: str):
     # read the query file and create a copy of it for appending the score
     query_df = pd.read_json(query_json_path, lines=True)
     query_df_scored = query_df.copy(deep=True)
 
     # get the image and feedback embeddings
     img_embs = pd.read_json(img_emb_json_path, lines=True)
-    feedback_embs = get_feedback_emb_from_query(model)
+    print("Getting feedback Embeddings...")
+    feedback_embs = get_feedback_emb_from_query(model, PATH_QUERY_FILE)
 
     # Keeping track of missing images (corrupted data)
     missing_img_source = set()
     missing_img_candidate = set()
 
     # For each query, calculate the cosine similarity between the source emb and the candidates
-    for i_row, row in tqdm(query_df.iterrows()):
+    for i_row, row in tqdm(query_df.iterrows(), "Query Caculated:"):
         source_pid = row["source_pid"]
         source_img_emb = img_embs.get(source_pid, None)
 
+        # Checking if the source image embeddings is there
         if source_img_emb is None:
             missing_img_source.add(source_pid)
             source_emb = None
@@ -84,6 +86,7 @@ def evaluate(model: SentenceTransformer, query_json_path: str, img_emb_json_path
             feedback_emb = feedback_embs[source_pid]
             source_img_emb = torch.tensor(source_img_emb)
 
+            # Add the source image and the corresponding feedback
             source_emb = source_img_emb + feedback_emb
 
         for i_c, c in enumerate(row["candidates"]):
@@ -101,24 +104,24 @@ def evaluate(model: SentenceTransformer, query_json_path: str, img_emb_json_path
 
             query_df_scored.iloc[i_row]['candidates'][i_c]['score'] = score
 
-    print("Missing", len(missing_img_source), "source images")
+    print("\nMissing", len(missing_img_source), "source images")
     print(missing_img_source)
 
-    print("Missing", len(missing_img_candidate), "source images")
+    print("\nMissing", len(missing_img_candidate), "candidate images")
     print(missing_img_candidate)
 
-    return query_df_scored
+    # return query_df_scored
+    query_df_scored.to_json(path_or_buf=output_path,
+                            orient='records', lines=True)
 
 
 if __name__ == "__main__":
-    model = SentenceTransformer('clip-ViT-B-32')
-    IMG_EMBS_PATH = "results/query/img_embs.jsonl"
+    model = SentenceTransformer('clip-ViT-B-16')
+    IMG_EMBS_PATH = "results/query/img_embs_b16_no_finetune_512.jsonl"
 
     if not os.path.exists(IMG_EMBS_PATH):
         output_img_emb(model, "images/query/", IMG_EMBS_PATH)
 
-    scored = evaluate(model, PATH_QUERY_FILE, IMG_EMBS_PATH)
-
     PATH_RESULTS_SAVE = './results/scored_query_file' + \
         datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + '.jsonl'
-    scored.to_json(path_or_buf=PATH_RESULTS_SAVE, orient='records', lines=True)
+    evaluate_query(model, PATH_QUERY_FILE, IMG_EMBS_PATH, PATH_RESULTS_SAVE)
