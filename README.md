@@ -7,4 +7,3 @@
 - [ ] Download data to local (Duy)
 - [ ] Load images to vision encoder (Rishan)
 - [ ] Load feedbacks to text encoder (Rishan)
-- [ ] Create a Feed-forward Neural Network to combine the vectors
