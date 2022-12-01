@@ -1,4 +1,4 @@
-# CS4973 Research Project
+# CS4973 Research Project: One-shot Product Search
 
 [Link to main challenge](https://eval.ai/web/challenges/challenge-page/1845/overview)
 

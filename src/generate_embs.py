@@ -7,36 +7,69 @@ import datetime
 import math
 from tqdm import tqdm
 import json
+import argparse
 
 PATH_APPAREL_TRAIN_ANNOTATION = './dataset/apparel_train_annotation.csv'
 PATH_QUERY_FILE = './dataset/query_file_released.jsonl'
-IMAGE_BATCH_SIZE = 3072
+IMAGE_BATCH_SIZE = 1024
+
+MODEL_BASE = 'clip-ViT-B-32'
+MODEL_MEDIUM = 'clip-ViT-B-16'
+MODEL_LARGE = 'clip-ViT-L-32'
 
 
-def get_img_emb(model: SentenceTransformer, img_path: str) -> dict[str, torch.Tensor]:
+def get_img_emb(model: SentenceTransformer, img_path: str, output_path: str):
+    """Generate image embeddings for every image in a given folder using the given model
+    and output it to the given output file name 
+
+    Args:
+        model (SentenceTransformer): The given sentence transformer model
+        img_path (str): The image folder path 
+        output_path (str): The file to output the image embeddings
+    """
+    # Get all the image names in the folder
     img_names = os.listdir(img_path)
+
+    if os.path.exists(output_path):
+        img_embs = pd.read_json(output_path, lines=True)
+        calculated_imgs = img_embs.keys()
+
+        for img in calculated_imgs:
+            img_names.remove(img + ".jpg")
+
     img_emb_dict = {}
 
+    # Since there is a limit to how many image can be opened
+    # at the same time in a system, we will process the images in batch
+    # (this batch is different from the batch when doing the model encoding)
     num_batch = math.ceil(len(img_names) / IMAGE_BATCH_SIZE)
+
     for i in range(0, len(img_names), IMAGE_BATCH_SIZE):
         print("BATCH", i // IMAGE_BATCH_SIZE + 1, "OF", num_batch)
-        batch_img = img_names[i: i + IMAGE_BATCH_SIZE]
+        batch_imgs = img_names[i: i + IMAGE_BATCH_SIZE]
         img_embs = model.encode([Image.open(img_path + "/" + name)
-                                for name in batch_img], show_progress_bar=True)
+                                for name in batch_imgs], show_progress_bar=True)
 
+        # put the image id and the corresponding embedding into a dictionary
         img_emb_dict.update({img_name.split(".")[0]: img_emb.tolist() for img_name,
-                             img_emb in zip(batch_img, img_embs)})
+                             img_emb in zip(batch_imgs, img_embs)})
 
-    return img_emb_dict
-
-
-def output_img_emb(model: SentenceTransformer, path: str, output_path: str):
-    img_embs = get_img_emb(model, path)
-    with open(output_path, "w") as outfile:
-        json.dump(img_embs, outfile)
+        # Write to the given file the dictionary
+        with open(output_path, "w") as outfile:
+            json.dump(img_embs, outfile)
 
 
 def get_feedback_emb_from_query(model: SentenceTransformer, query_path: str):
+    """Generate the embeddings for the feedbacks from the query using the given model
+
+    Args:
+        model (SentenceTransformer): The given sentence transformer model 
+        query_path (str): The query file location
+
+    Returns:
+        dict: a dictionary that maps the source_pid of the query to the 
+        corresponding feedback embeddings
+    """
     query_df = pd.read_json(query_path, lines=True)
     feedbacks = []
     source_pids = []
@@ -53,6 +86,7 @@ def get_feedback_emb_from_query(model: SentenceTransformer, query_path: str):
         feedback2 = feedback_embs[3 * i + 1]
         feedback3 = feedback_embs[3 * i + 2]
 
+        # Adding all the feedback embeddings together
         feedback_emb = feedback1 + feedback2 + feedback3
         feedback_emb_dict[pid] = feedback_emb
 
@@ -60,6 +94,15 @@ def get_feedback_emb_from_query(model: SentenceTransformer, query_path: str):
 
 
 def evaluate_query(model: SentenceTransformer, query_json_path: str, img_emb_json_path: str, output_path: str):
+    """Evaluate a given query using a given a model and output it to a given file path
+
+    Args:
+        model (SentenceTransformer): The given sentence transformer model
+        query_json_path (str): The query file path 
+        img_emb_json_path (str): The image embeddings file path 
+                                 (The same as the output path for get_img_emb)
+        output_path (str): The output file path for the new query with score for each candidate
+    """
     # read the query file and create a copy of it for appending the score
     query_df = pd.read_json(query_json_path, lines=True)
     query_df_scored = query_df.copy(deep=True)
@@ -115,13 +158,30 @@ def evaluate_query(model: SentenceTransformer, query_json_path: str, img_emb_jso
                             orient='records', lines=True)
 
 
+def generate_embs(agrs):
+    if args.model == "base":
+        model_name = MODEL_BASE
+    elif args.model == "med":
+        model_name = MODEL_MEDIUM
+    elif args.model == "large":
+        model_name = MODEL_LARGE
+    else:
+        print("No model exists with name:", args.model)
+
+    if args.query:
+        img_path = "images/query/"
+        img_embs_path = "results/query/img_embs_b16_no_finetune_512.jsonl"
+        print("Generating query images embeddings...")
+
+    model = SentenceTransformer(model_name)
+    get_img_emb(model, img_path, img_embs_path)
+
+
 if __name__ == "__main__":
-    model = SentenceTransformer('clip-ViT-B-16')
-    IMG_EMBS_PATH = "results/query/img_embs_b16_no_finetune_512.jsonl"
-
-    if not os.path.exists(IMG_EMBS_PATH):
-        output_img_emb(model, "images/query/", IMG_EMBS_PATH)
-
-    PATH_RESULTS_SAVE = './results/scored_query_file' + \
-        datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + '.jsonl'
-    evaluate_query(model, PATH_QUERY_FILE, IMG_EMBS_PATH, PATH_RESULTS_SAVE)
+    parser = argparse.ArgumentParser(description='Generate image embeddings')
+    parser.add_argument('--annotation', action="store_true")
+    parser.add_argument('--query', action="store_true")
+    parser.add_argument('--gallery', action="store_true")
+    parser.add_argument('--model', type=str, default="base")
+    args = parser.parse_args()
+    generate_embs(args)
