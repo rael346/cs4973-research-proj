@@ -2,12 +2,11 @@ import pandas as pd
 from sentence_transformers import SentenceTransformer, util
 from PIL import Image
 import os
-import torch
-import datetime
 import math
-from tqdm import tqdm
 import json
 import argparse
+import numpy as np
+from sklearn.decomposition import PCA
 
 PATH_APPAREL_TRAIN_ANNOTATION = './dataset/apparel_train_annotation.csv'
 PATH_QUERY_FILE = './dataset/query_file_released.jsonl'
@@ -15,7 +14,7 @@ IMAGE_BATCH_SIZE = 1024
 
 MODEL_BASE = 'clip-ViT-B-32'
 MODEL_MEDIUM = 'clip-ViT-B-16'
-MODEL_LARGE = 'clip-ViT-L-32'
+MODEL_LARGE = 'clip-ViT-L-14'
 
 
 def get_img_emb(model: SentenceTransformer, img_path: str, output_path: str):
@@ -28,16 +27,22 @@ def get_img_emb(model: SentenceTransformer, img_path: str, output_path: str):
         output_path (str): The file to output the image embeddings
     """
     # Get all the image names in the folder
-    img_names = os.listdir(img_path)
+    img_names = set(os.listdir(img_path))
+    img_emb_dict = {}
 
     if os.path.exists(output_path):
-        img_embs = pd.read_json(output_path, lines=True)
+        f = open(output_path)
+        img_embs = json.load(f)
         calculated_imgs = img_embs.keys()
 
+        img_emb_dict.update(img_embs)
         for img in calculated_imgs:
             img_names.remove(img + ".jpg")
+        f.close()
 
-    img_emb_dict = {}
+    print("\nImage left to calculate:", len(img_names))
+    print("Image calculated:", len(img_emb_dict), "\n")
+    img_names = list(img_names)
 
     # Since there is a limit to how many image can be opened
     # at the same time in a system, we will process the images in batch
@@ -56,10 +61,10 @@ def get_img_emb(model: SentenceTransformer, img_path: str, output_path: str):
 
         # Write to the given file the dictionary
         with open(output_path, "w") as outfile:
-            json.dump(img_embs, outfile)
+            json.dump(img_emb_dict, outfile)
 
 
-def get_feedback_emb_from_query(model: SentenceTransformer, query_path: str):
+def get_feedback_emb_from_query(model: SentenceTransformer, query_path: str, output_path: str):
     """Generate the embeddings for the feedbacks from the query using the given model
 
     Args:
@@ -92,89 +97,38 @@ def get_feedback_emb_from_query(model: SentenceTransformer, query_path: str):
 
     return feedback_emb_dict
 
-
-def evaluate_query(model: SentenceTransformer, query_json_path: str, img_emb_json_path: str, output_path: str):
-    """Evaluate a given query using a given a model and output it to a given file path
-
-    Args:
-        model (SentenceTransformer): The given sentence transformer model
-        query_json_path (str): The query file path 
-        img_emb_json_path (str): The image embeddings file path 
-                                 (The same as the output path for get_img_emb)
-        output_path (str): The output file path for the new query with score for each candidate
-    """
-    # read the query file and create a copy of it for appending the score
-    query_df = pd.read_json(query_json_path, lines=True)
-    query_df_scored = query_df.copy(deep=True)
-
-    # get the image and feedback embeddings
-    img_embs = pd.read_json(img_emb_json_path, lines=True)
-    print("Getting feedback Embeddings...")
-    feedback_embs = get_feedback_emb_from_query(model, PATH_QUERY_FILE)
-
-    # Keeping track of missing images (corrupted data)
-    missing_img_source = set()
-    missing_img_candidate = set()
-
-    # For each query, calculate the cosine similarity between the source emb and the candidates
-    for i_row, row in tqdm(query_df.iterrows(), "Query Caculated:"):
-        source_pid = row["source_pid"]
-        source_img_emb = img_embs.get(source_pid, None)
-
-        # Checking if the source image embeddings is there
-        if source_img_emb is None:
-            missing_img_source.add(source_pid)
-            source_emb = None
-        else:
-            feedback_emb = feedback_embs[source_pid]
-            source_img_emb = torch.tensor(source_img_emb)
-
-            # Add the source image and the corresponding feedback
-            source_emb = source_img_emb + feedback_emb
-
-        for i_c, c in enumerate(row["candidates"]):
-            c_pid = c["candidate_pid"]
-            c_emb = img_embs.get(c_pid, None)
-
-            if c_emb is None:
-                missing_img_candidate.add(c_pid)
-
-            # If either the candidate or the source embedding is missing, the score is 0
-            if c_emb is None or source_emb is None:
-                score = 0
-            else:
-                score = util.cos_sim(source_emb, c_emb).item()
-
-            query_df_scored.iloc[i_row]['candidates'][i_c]['score'] = score
-
-    print("\nMissing", len(missing_img_source), "source images")
-    print(missing_img_source)
-
-    print("\nMissing", len(missing_img_candidate), "candidate images")
-    print(missing_img_candidate)
-
-    # return query_df_scored
-    query_df_scored.to_json(path_or_buf=output_path,
-                            orient='records', lines=True)
-
-
 def generate_embs(agrs):
     if args.model == "base":
         model_name = MODEL_BASE
+        version = "b32"
     elif args.model == "med":
         model_name = MODEL_MEDIUM
+        version = "b16"
     elif args.model == "large":
         model_name = MODEL_LARGE
+        version = "l14"
     else:
         print("No model exists with name:", args.model)
 
     if args.query:
+        result_folder = "results/query/"
+        if not os.path.exists(result_folder):
+            os.mkdir(result_folder)
+
         img_path = "images/query/"
-        img_embs_path = "results/query/img_embs_b16_no_finetune_512.jsonl"
+        img_embs_path = f"{result_folder}img_embs_{version}_no_finetune_512.jsonl"
         print("Generating query images embeddings...")
 
     model = SentenceTransformer(model_name)
     get_img_emb(model, img_path, img_embs_path)
+    print("DONE!, embeddings are in", img_embs_path)
+
+def dimensionality_reduction(emb_json_path: str):
+    pca = PCA(n_components=128)
+    img_embs = pd.read_json(emb_json_path, lines=True)
+    pca.fit(img_embs.values)
+    pca_comp = np.asarray(pca.components_)
+
 
 
 if __name__ == "__main__":

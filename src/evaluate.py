@@ -2,9 +2,10 @@ import pandas as pd
 from sentence_transformers import SentenceTransformer, util
 import torch
 from tqdm import tqdm
-import json
+import datetime
 from generate_embs import get_feedback_emb_from_query
 
+PATH_QUERY_FILE = './dataset/query_file_released.jsonl'
 
 def evaluate_query(model: SentenceTransformer, query_json_path: str, img_emb_json_path: str, output_path: str):
     """Evaluate a given query using a given a model and output it to a given file path
@@ -72,10 +73,8 @@ def evaluate_query(model: SentenceTransformer, query_json_path: str, img_emb_jso
 
 
 if __name__ == "__main__":
-    model = SentenceTransformer('clip-ViT-B-16')
-    IMG_EMBS_PATH = "results/query/img_embs_b16_no_finetune_512.jsonl"
-
-    get_img_emb(model, "images/query/", IMG_EMBS_PATH)
+    model = SentenceTransformer('clip-ViT-L-14')
+    IMG_EMBS_PATH = "results/query/img_embs_l32_no_finetune_512.jsonl"
 
     PATH_RESULTS_SAVE = './results/scored_query_file' + \
         datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + '.jsonl'
