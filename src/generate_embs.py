@@ -1,11 +1,12 @@
 import pandas as pd
-from sentence_transformers import SentenceTransformer, util
+from sentence_transformers import SentenceTransformer
 from PIL import Image
 import os
 import math
 import json
 import argparse
 import numpy as np
+import torch
 from sklearn.decomposition import PCA
 
 PATH_APPAREL_TRAIN_ANNOTATION = './dataset/apparel_train_annotation.csv'
@@ -64,17 +65,21 @@ def get_img_emb(model: SentenceTransformer, img_path: str, output_path: str):
             json.dump(img_emb_dict, outfile)
 
 
-def get_feedback_emb_from_query(model: SentenceTransformer, query_path: str, output_path: str):
-    """Generate the embeddings for the feedbacks from the query using the given model
+def get_source_emb_from_query(model: SentenceTransformer, query_path: str, img_emb_json_path: str, output_path: str):
+    """Generate the embeddings for the query using the given model
 
     Args:
         model (SentenceTransformer): The given sentence transformer model 
         query_path (str): The query file location
+        img_emb_json_path (str): The image embeddings for the query 
+        output_path (str): The output file path for the generating embeddings
 
     Returns:
         dict: a dictionary that maps the source_pid of the query to the 
         corresponding feedback embeddings
     """
+    with open(img_emb_json_path) as f:
+        img_embs = json.load(f)
     query_df = pd.read_json(query_path, lines=True)
     feedbacks = []
     source_pids = []
@@ -91,11 +96,19 @@ def get_feedback_emb_from_query(model: SentenceTransformer, query_path: str, out
         feedback2 = feedback_embs[3 * i + 1]
         feedback3 = feedback_embs[3 * i + 2]
 
-        # Adding all the feedback embeddings together
-        feedback_emb = feedback1 + feedback2 + feedback3
-        feedback_emb_dict[pid] = feedback_emb
+        source_img_emb = img_embs.get(pid, None)
+        if source_img_emb is None:
+            source_emb = None
+        else:
+            source_img_emb = torch.tensor(source_img_emb)
+            feedback_emb = feedback1 + feedback2 + feedback3
+            source_emb = source_img_emb + feedback_emb
+            source_emb = source_emb.tolist()
 
-    return feedback_emb_dict
+        feedback_emb_dict[pid] = source_emb
+
+    with open(output_path, "w") as outfile:
+        json.dump(feedback_emb_dict, outfile)
 
 def generate_embs(agrs):
     if args.model == "base":
@@ -109,6 +122,7 @@ def generate_embs(agrs):
         version = "l14"
     else:
         print("No model exists with name:", args.model)
+    model = SentenceTransformer(model_name)
 
     if args.query:
         result_folder = "results/query/"
@@ -118,10 +132,13 @@ def generate_embs(agrs):
         img_path = "images/query/"
         img_embs_path = f"{result_folder}img_embs_{version}_no_finetune_512.jsonl"
         print("Generating query images embeddings...")
+        get_img_emb(model, img_path, img_embs_path)
+        print("DONE!, embeddings are in", img_embs_path)
 
-    model = SentenceTransformer(model_name)
-    get_img_emb(model, img_path, img_embs_path)
-    print("DONE!, embeddings are in", img_embs_path)
+    if args.source_query:
+        output = "results/query/source_query_embs_b32_no_finetune_512.jsonl"
+        get_source_emb_from_query(model, PATH_QUERY_FILE, "results/query/img_embs_b32_no_finetune_512.jsonl", output)
+    
 
 def dimensionality_reduction(emb_json_path: str):
     pca = PCA(n_components=128)
@@ -132,10 +149,11 @@ def dimensionality_reduction(emb_json_path: str):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Generate image embeddings')
+    parser = argparse.ArgumentParser(description='Generate embeddings')
     parser.add_argument('--annotation', action="store_true")
     parser.add_argument('--query', action="store_true")
     parser.add_argument('--gallery', action="store_true")
     parser.add_argument('--model', type=str, default="base")
+    parser.add_argument('--source_query', action="store_true")
     args = parser.parse_args()
     generate_embs(args)

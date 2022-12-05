@@ -1,13 +1,13 @@
 import pandas as pd
-from sentence_transformers import SentenceTransformer, util
+from sentence_transformers import util
 import torch
 from tqdm import tqdm
 import datetime
-from generate_embs import get_feedback_emb_from_query
+import json
 
 PATH_QUERY_FILE = './dataset/query_file_released.jsonl'
 
-def evaluate_query(model: SentenceTransformer, query_json_path: str, img_emb_json_path: str, output_path: str):
+def evaluate_query(query_json_path: str, img_emb_json_path: str, source_query_emb_path: str, output_path: str):
     """Evaluate a given query using a given a model and output it to a given file path
 
     Args:
@@ -22,50 +22,30 @@ def evaluate_query(model: SentenceTransformer, query_json_path: str, img_emb_jso
     query_df_scored = query_df.copy(deep=True)
 
     # get the image and feedback embeddings
-    img_embs = pd.read_json(img_emb_json_path, lines=True)
-    print("Getting feedback Embeddings...")
-    feedback_embs = get_feedback_emb_from_query(model, query_json_path)
+    with open(img_emb_json_path) as f:
+        img_embs = json.load(f)
 
-    # Keeping track of missing images (corrupted data)
-    missing_img_source = set()
-    missing_img_candidate = set()
+    with open(source_query_emb_path) as f:
+        source_embs = json.load(f)
 
     # For each query, calculate the cosine similarity between the source emb and the candidates
-    for i_row, row in tqdm(query_df.iterrows(), "Query Caculated:"):
+    for i_row, row in tqdm(query_df.iterrows(), "Query Caculated", len(query_df)):
         source_pid = row["source_pid"]
-        source_img_emb = img_embs.get(source_pid, None)
-
-        # Checking if the source image embeddings is there
-        if source_img_emb is None:
-            missing_img_source.add(source_pid)
-            source_emb = None
-        else:
-            feedback_emb = feedback_embs[source_pid]
-            source_img_emb = torch.tensor(source_img_emb)
-
-            # Add the source image and the corresponding feedback
-            source_emb = source_img_emb + feedback_emb
+        source_emb = source_embs[source_pid]
 
         for i_c, c in enumerate(row["candidates"]):
             c_pid = c["candidate_pid"]
             c_emb = img_embs.get(c_pid, None)
 
-            if c_emb is None:
-                missing_img_candidate.add(c_pid)
-
             # If either the candidate or the source embedding is missing, the score is 0
             if c_emb is None or source_emb is None:
                 score = 0
             else:
+                source_emb = torch.Tensor(source_emb)
+                c_emb = torch.Tensor(c_emb)
                 score = util.cos_sim(source_emb, c_emb).item()
 
             query_df_scored.iloc[i_row]['candidates'][i_c]['score'] = score
-
-    print("\nMissing", len(missing_img_source), "source images")
-    print(missing_img_source)
-
-    print("\nMissing", len(missing_img_candidate), "candidate images")
-    print(missing_img_candidate)
 
     # return query_df_scored
     query_df_scored.to_json(path_or_buf=output_path,
@@ -73,9 +53,9 @@ def evaluate_query(model: SentenceTransformer, query_json_path: str, img_emb_jso
 
 
 if __name__ == "__main__":
-    model = SentenceTransformer('clip-ViT-L-14')
-    IMG_EMBS_PATH = "results/query/img_embs_l32_no_finetune_512.jsonl"
-
+    dim = 512
     PATH_RESULTS_SAVE = './results/scored_query_file' + \
         datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + '.jsonl'
-    evaluate_query(model, PATH_QUERY_FILE, IMG_EMBS_PATH, PATH_RESULTS_SAVE)
+    source_query_path = f"results/query/source_query_embs_b32_no_finetune_{dim}.jsonl"
+    IMG_EMBS_PATH = f"results/query/img_embs_b32_no_finetune_{dim}.jsonl"
+    evaluate_query(PATH_QUERY_FILE, IMG_EMBS_PATH, source_query_path, PATH_RESULTS_SAVE)
