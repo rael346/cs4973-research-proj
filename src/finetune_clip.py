@@ -77,7 +77,7 @@ def get_image_text_dataset(annotation_path, annotation_images_path):
 # Finetunes the model with batch size and number of epochs, saving the
 # model state to the specified folder at end of each epoch
 def finetune(dataset, path_save_model, train_batch_size=2, num_epochs=1):
-    train_dataloader = DataLoader(dataset, batch_size=train_batch_size)
+    train_dataloader = DataLoader(dataset, batch_size=train_batch_size, num_workers=4)
 
     if device == "cpu":
         model.float()

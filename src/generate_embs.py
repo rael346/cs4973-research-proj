@@ -1,23 +1,27 @@
 import pandas as pd
-from sentence_transformers import SentenceTransformer, util
+# from sentence_transformers import SentenceTransformer
 from PIL import Image
 import os
 import math
 import json
 import argparse
 import numpy as np
-from sklearn.decomposition import PCA
+import clip
+import torch
+from tqdm import tqdm
+# from sklearn.decomposition import PCA
 
 PATH_APPAREL_TRAIN_ANNOTATION = './dataset/apparel_train_annotation.csv'
 PATH_QUERY_FILE = './dataset/query_file_released.jsonl'
 IMAGE_BATCH_SIZE = 1024
 
-MODEL_BASE = 'clip-ViT-B-32'
-MODEL_MEDIUM = 'clip-ViT-B-16'
-MODEL_LARGE = 'clip-ViT-L-14'
+MODEL_BASE = 'ViT-B/32'
+MODEL_MEDIUM = 'ViT-B/16'
+MODEL_LARGE = 'ViT-L/14'
 
+device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
-def get_img_emb(model: SentenceTransformer, img_path: str, output_path: str):
+def get_img_emb(model, preprocess, img_path: str, output_path: str):
     """Generate image embeddings for every image in a given folder using the given model
     and output it to the given output file name 
 
@@ -27,44 +31,51 @@ def get_img_emb(model: SentenceTransformer, img_path: str, output_path: str):
         output_path (str): The file to output the image embeddings
     """
     # Get all the image names in the folder
-    img_names = set(os.listdir(img_path))
+    img_names = os.listdir(img_path)
     img_emb_dict = {}
 
-    if os.path.exists(output_path):
-        f = open(output_path)
-        img_embs = json.load(f)
-        calculated_imgs = img_embs.keys()
+    # if os.path.exists(output_path):
+    #     f = open(output_path)
+    #     img_embs = json.load(f)
+    #     calculated_imgs = img_embs.keys()
 
-        img_emb_dict.update(img_embs)
-        for img in calculated_imgs:
-            img_names.remove(img + ".jpg")
-        f.close()
+    #     img_emb_dict.update(img_embs)
+    #     for img in calculated_imgs:
+    #         img_names.remove(img + ".jpg")
+    #     f.close()
 
-    print("\nImage left to calculate:", len(img_names))
-    print("Image calculated:", len(img_emb_dict), "\n")
-    img_names = list(img_names)
+    # print("\nImage left to calculate:", len(img_names))
+    # print("Image calculated:", len(img_emb_dict), "\n")
+    # img_names = list(img_names)
 
     # Since there is a limit to how many image can be opened
     # at the same time in a system, we will process the images in batch
     # (this batch is different from the batch when doing the model encoding)
-    num_batch = math.ceil(len(img_names) / IMAGE_BATCH_SIZE)
+    # num_batch = math.ceil(len(img_names) / IMAGE_BATCH_SIZE)
 
-    for i in range(0, len(img_names), IMAGE_BATCH_SIZE):
-        print("BATCH", i // IMAGE_BATCH_SIZE + 1, "OF", num_batch)
-        batch_imgs = img_names[i: i + IMAGE_BATCH_SIZE]
-        img_embs = model.encode([Image.open(img_path + "/" + name)
-                                for name in batch_imgs], show_progress_bar=True)
+    # for i in range(0, len(img_names), IMAGE_BATCH_SIZE):
+    #     print("BATCH", i // IMAGE_BATCH_SIZE + 1, "OF", num_batch)
+    #     batch_imgs = img_names[i: i + IMAGE_BATCH_SIZE]
+    #     img_embs = model.encode([Image.open(img_path + "/" + name)
+    #                             for name in batch_imgs], show_progress_bar=True)
 
-        # put the image id and the corresponding embedding into a dictionary
-        img_emb_dict.update({img_name.split(".")[0]: img_emb.tolist() for img_name,
-                             img_emb in zip(batch_imgs, img_embs)})
+    #     # put the image id and the corresponding embedding into a dictionary
+    #     img_emb_dict.update({img_name.split(".")[0]: img_emb.tolist() for img_name,
+    #                          img_emb in zip(batch_imgs, img_embs)})
 
-        # Write to the given file the dictionary
-        with open(output_path, "w") as outfile:
-            json.dump(img_emb_dict, outfile)
+    #     # Write to the given file the dictionary
+    #     with open(output_path, "w") as outfile:
+    #         json.dump(img_emb_dict, outfile)
+    for img_name in tqdm(img_names, desc="Encoding images", total=len(img_names)):
+        image = preprocess(Image.open(img_path + img_name)).unsqueeze(0).to(device)
+        image_features = model.encode_image(image)
+        img_emb_dict[img_name.split(".")[0]] = image_features.tolist()[0]
+    
+    with open(output_path, "w") as outfile:
+        json.dump(img_emb_dict, outfile)
 
 
-def get_feedback_emb_from_query(model: SentenceTransformer, query_path: str, output_path: str):
+def get_feedback_emb_from_query(model, query_path: str, output_path: str):
     """Generate the embeddings for the feedbacks from the query using the given model
 
     Args:
@@ -88,7 +99,7 @@ def get_feedback_emb_from_query(model: SentenceTransformer, query_path: str, out
     feedback_emb_dict = {}
     for i, pid in enumerate(source_pids):
         feedback1 = feedback_embs[3 * i]
-        feedback2 = feedback_embs[3 * i + 1]
+        feedback2 = feedback_embs[3 * i]
         feedback3 = feedback_embs[3 * i + 2]
 
         # Adding all the feedback embeddings together
@@ -107,28 +118,29 @@ def generate_embs(agrs):
     elif args.model == "large":
         model_name = MODEL_LARGE
         version = "l14"
-    else:
-        print("No model exists with name:", args.model)
+    
+    if args.models:
+        print(clip.available_models())
 
+
+    model, preprocess = clip.load(model_name, device = device, jit=False) #Must set jit=False for training
+    checkpoint = torch.load("results/models/finetuned/model_epoch31_20221205-133726.pt")
+    model.load_state_dict(checkpoint['model_state_dict'])
+    
     if args.query:
         result_folder = "results/query/"
         if not os.path.exists(result_folder):
             os.mkdir(result_folder)
 
         img_path = "images/query/"
-        img_embs_path = f"{result_folder}img_embs_{version}_no_finetune_512.jsonl"
+        img_embs_path = f"{result_folder}img_embs_{version}_finetune_512.jsonl"
         print("Generating query images embeddings...")
+        # image = preprocess(Image.open(img_path + "21-cdT54ZSL.jpg")).unsqueeze(0).to(device)
+        # image_features = model.encode_image(image)
+        # print(len(image_features.tolist()[0]))
 
-    model = SentenceTransformer(model_name)
-    get_img_emb(model, img_path, img_embs_path)
+    get_img_emb(model, preprocess, img_path, img_embs_path)
     print("DONE!, embeddings are in", img_embs_path)
-
-def dimensionality_reduction(emb_json_path: str):
-    pca = PCA(n_components=128)
-    img_embs = pd.read_json(emb_json_path, lines=True)
-    pca.fit(img_embs.values)
-    pca_comp = np.asarray(pca.components_)
-
 
 
 if __name__ == "__main__":
@@ -137,5 +149,6 @@ if __name__ == "__main__":
     parser.add_argument('--query', action="store_true")
     parser.add_argument('--gallery', action="store_true")
     parser.add_argument('--model', type=str, default="base")
+    parser.add_argument('--models', action="store_true")
     args = parser.parse_args()
     generate_embs(args)
