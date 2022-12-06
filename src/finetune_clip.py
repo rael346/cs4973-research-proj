@@ -11,67 +11,87 @@ import time
 
 PATH_IMAGES_ANNOTATION = './images/annotation/'
 PATH_APPAREL_TRAIN_ANNOTATION = './dataset/apparel_train_annotation.csv'
-PATH_SAVE_MODEL = './results/models/finetuned/'
+PATH_SAVE_MODEL = '.models/finetuned/'
 
-missing_img_targets = set()
+# missing_img_targets = set()
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 model, preprocess = clip.load("ViT-B/32", device=device, jit=False)
 
-# https://github.com/openai/CLIP/issues/83
-class image_title_dataset(Dataset):
-    def __init__(self, list_image_path, list_txt):
-        self.image_path = list_image_path
-        self.title = clip.tokenize(list_txt)
+
+class Annotation(Dataset):
+    # https://github.com/openai/CLIP/issues/83
+    def __init__(self, list_src, list_feedbacks, list_target, list_non_target):
+        self.src_path = list_src
+        self.feedbacks = clip.tokenize(list_feedbacks)
+        self.target_path = list_target
+        self.non_target_path = list_non_target
 
     def __len__(self):
-        return len(self.title)
+        return len(self.feedbacks)
 
     def __getitem__(self, idx):
-        image = preprocess(Image.open(self.image_path[idx]))
-        title = self.title[idx]
-        return image, title
+        src = preprocess(Image.open(self.src_path[idx]))
+        feedback = self.feedbacks[idx]
+        target = preprocess(Image.open(self.target_path[idx]))
+        non_target = preprocess(Image.open(self.non_target_path[idx]))
 
-# https://github.com/openai/CLIP/issues/57
+        return src, feedback, target, non_target
+
+
 def convert_models_to_fp32(model):
+    # https://github.com/openai/CLIP/issues/57
     for p in model.parameters():
         p.data = p.data.float()
         p.grad.data = p.grad.data.float()
 
-# returns a Dataset object containing annotation training target images with feedbacks.
-# Each feedback of the 3 feedbacks are individually paired with their target image
+
 def get_image_text_dataset(annotation_path, annotation_images_path):
+    # returns a Dataset object containing annotation training target images with feedbacks.
+    # Each feedback of the 3 feedbacks are individually paired with their target image
     annotation_df = pd.read_csv(annotation_path)
-    image_paths = []
-    texts = []
+    # image_paths = []
+    # texts = []
 
-    target_ids = []
+    sources = []
     feedbacks = []
+    targets = []
+    non_targets = []
 
+    num_missing_annotation = 0
     print("Processing annotation file...")
     for _, row in annotation_df.iterrows():
-        target_ids.append(row['Target Image ID'])
-        feedbacks.append(
+        src_id, target_id, non_target_id = row['Source Image ID'], row['Target Image ID'], row["Non-Target Image ID"]
+        fb = ", ".join(
             [row["Feedback 1"], row["Feedback 2"], row["Feedback 3"]])
-    print("Number of unique target IDs: " + str(len(set(target_ids))))
-    print("Batches of feedbacks: " + str(len(feedbacks)))
 
-    print("Adding target training images to dataset...")
-    for _, (target_id, feedbacks) in enumerate(zip(target_ids, feedbacks)):
+        src_path = annotation_images_path + src_id + '.jpg'
         target_path = annotation_images_path + target_id + '.jpg'
-        if os.path.exists(target_path):
-            for feedback in feedbacks:
-                image_paths.append(target_path)
-                texts.append(feedback)
+        non_target_path = annotation_images_path + non_target_id + '.jpg'
+
+        if os.path.exists(src_path) and os.path.exists(target_path) and os.path.exists(non_target_path):
+            sources.append(src_path)
+            feedbacks.append(fb)
+            targets.append(target_path)
+            non_targets.append(non_target_path)
         else:
-            missing_img_targets.add(target_id)
-    print("Finished adding target training images...")
+            num_missing_annotation += 1
 
-    print("Missing", len(missing_img_targets), "target images")
-    if len(missing_img_targets) > 0:
-        print(missing_img_targets)
+    # print("Adding target training images to dataset...")
+    # for _, (target_id, feedbacks) in enumerate(zip(targets, feedbacks)):
+    #     target_path = annotation_images_path + target_id + '.jpg'
+    #     if os.path.exists(target_path):
+    #         for feedback in feedbacks:
+    #             image_paths.append(target_path)
+    #             texts.append(feedback)
+    #     else:
+    #         missing_img_targets.add(target_id)
+    # print("Finished adding target training images...")
 
-    return image_title_dataset(image_paths, texts)
+    print(len(num_missing_annotation),
+          "corrupted annotations (missing src, target or non target images)")
+
+    return Annotation(sources, feedbacks, targets, non_targets)
 
 
 # Finetunes the model with batch size and number of epochs, saving the
@@ -84,31 +104,38 @@ def finetune(dataset, path_save_model, train_batch_size=2, num_epochs=1):
     else:
         clip.model.convert_weights(model)
 
-    loss_img = nn.CrossEntropyLoss()
-    loss_txt = nn.CrossEntropyLoss()
+    loss_func = nn.CrossEntropyLoss()
 
     # Params used from paper, the lr is smaller, more safe for fine tuning to new dataset
     optimizer = optim.Adam(model.parameters(), lr=5e-5,
                            betas=(0.9, 0.98), eps=1e-6, weight_decay=0.2)
-                           
+
     for epoch in range(num_epochs):
         with tqdm.tqdm(train_dataloader, unit="batch") as tepoch:
-            for images, texts in tepoch:
+            for sources, feedbacks, targets, non_targets in tepoch:
                 tepoch.set_description(f"Epoch: {epoch}")
 
                 optimizer.zero_grad()
 
-                images = images.to(device)
-                texts = texts.to(device)
+                sources = sources.to(device)
+                feedbacks = feedbacks.to(device)
+                targets = targets.to(device)
+                # non_targets = non_targets.to(device)
 
-                logits_per_image, logits_per_text = model(images, texts)
+                # logits_per_image, logits_per_text = model(images, texts)
+                sources_embs = model.encode_image(sources)
+                feedbacks_embs = model.encode_text(feedbacks)
+                targets_embs = model.encode_text(targets)
 
                 ground_truth = torch.arange(
-                    len(images), dtype=torch.long, device=device)
+                    len(targets), dtype=torch.long, device=device)
 
-                total_loss = (loss_img(logits_per_image, ground_truth) +
-                              loss_txt(logits_per_text, ground_truth))/2
+                # total_loss = (loss_img(logits_per_image, ground_truth) +
+                #               loss_txt(logits_per_text, ground_truth))/2
+                total_loss = loss_func(
+                    sources_embs + feedbacks_embs, targets_embs)
                 total_loss.backward()
+
                 if device == "cpu":
                     optimizer.step()
                 else:
@@ -130,4 +157,4 @@ if __name__ == "__main__":
     print('CUDA available?: ' + str(torch.cuda.is_available()))
     dataset = get_image_text_dataset(
         PATH_APPAREL_TRAIN_ANNOTATION, PATH_IMAGES_ANNOTATION)
-    finetune(dataset, PATH_SAVE_MODEL, train_batch_size=100, num_epochs=32)
+    finetune(dataset, PATH_SAVE_MODEL, train_batch_size=120, num_epochs=32)
