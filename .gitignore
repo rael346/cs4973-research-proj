@@ -2,3 +2,6 @@ images
 env
 .DS_Store
 src/__pycache__/
+results/query/
+src/.finetune_clip.py.swp
+models/finetuned/

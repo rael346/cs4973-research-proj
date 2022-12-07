@@ -4,10 +4,12 @@ import torch
 from tqdm import tqdm
 import datetime
 from generate_embs import get_feedback_emb_from_query
+import clip
 
 PATH_QUERY_FILE = './dataset/query_file_released.jsonl'
+device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
-def evaluate_query(model: SentenceTransformer, query_json_path: str, img_emb_json_path: str, output_path: str):
+def evaluate_query(query_json_path: str, img_emb_json_path: str, feedback_emb_json_path: str, output_path: str):
     """Evaluate a given query using a given a model and output it to a given file path
 
     Args:
@@ -23,9 +25,8 @@ def evaluate_query(model: SentenceTransformer, query_json_path: str, img_emb_jso
 
     # get the image and feedback embeddings
     img_embs = pd.read_json(img_emb_json_path, lines=True)
-    print("Getting feedback Embeddings...")
-    feedback_embs = get_feedback_emb_from_query(model, query_json_path)
-
+    feedback_embs = pd.read_json(feedback_emb_json_path, lines=True)
+    
     # Keeping track of missing images (corrupted data)
     missing_img_source = set()
     missing_img_candidate = set()
@@ -40,7 +41,7 @@ def evaluate_query(model: SentenceTransformer, query_json_path: str, img_emb_jso
             missing_img_source.add(source_pid)
             source_emb = None
         else:
-            feedback_emb = feedback_embs[source_pid]
+            feedback_emb = torch.tensor(feedback_embs[source_pid])
             source_img_emb = torch.tensor(source_img_emb)
 
             # Add the source image and the corresponding feedback
@@ -57,6 +58,7 @@ def evaluate_query(model: SentenceTransformer, query_json_path: str, img_emb_jso
             if c_emb is None or source_emb is None:
                 score = 0
             else:
+                # torch.tensor
                 score = util.cos_sim(source_emb, c_emb).item()
 
             query_df_scored.iloc[i_row]['candidates'][i_c]['score'] = score
@@ -73,9 +75,18 @@ def evaluate_query(model: SentenceTransformer, query_json_path: str, img_emb_jso
 
 
 if __name__ == "__main__":
-    model = SentenceTransformer('clip-ViT-L-14')
-    IMG_EMBS_PATH = "results/query/img_embs_l32_no_finetune_512.jsonl"
-
+    model, preprocess = clip.load('ViT-B/32', device = device)
+    epoch1 = "results/models/finetuned/model_epoch1_20221205-123340.pt"
+    epoch31 = "results/models/finetuned/model_epoch31_20221205-133726.pt"
+    epoch16 = "models/finetuned/model_epoch16_20221206-174028.pt"
+    checkpoint = torch.load(epoch16)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    
+    IMG_EMBS_PATH = "results/query/img_embs_b32_clip_finetune_512_epoch_16.jsonl"
+    FEEDBACK_EMBS_PATH = "results/query/feedback_embs_b32_clip_finetune_512_epoch_16.jsonl"
     PATH_RESULTS_SAVE = './results/scored_query_file' + \
-        datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + '.jsonl'
-    evaluate_query(model, PATH_QUERY_FILE, IMG_EMBS_PATH, PATH_RESULTS_SAVE)
+        datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + '_epoch_1.jsonl'
+    
+    evaluate_query(PATH_QUERY_FILE, IMG_EMBS_PATH, FEEDBACK_EMBS_PATH, PATH_RESULTS_SAVE)
+
+    

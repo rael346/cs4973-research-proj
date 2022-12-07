@@ -33,49 +33,18 @@ def get_img_emb(model, preprocess, img_path: str, output_path: str):
     # Get all the image names in the folder
     img_names = os.listdir(img_path)
     img_emb_dict = {}
-
-    # if os.path.exists(output_path):
-    #     f = open(output_path)
-    #     img_embs = json.load(f)
-    #     calculated_imgs = img_embs.keys()
-
-    #     img_emb_dict.update(img_embs)
-    #     for img in calculated_imgs:
-    #         img_names.remove(img + ".jpg")
-    #     f.close()
-
-    # print("\nImage left to calculate:", len(img_names))
-    # print("Image calculated:", len(img_emb_dict), "\n")
-    # img_names = list(img_names)
-
-    # Since there is a limit to how many image can be opened
-    # at the same time in a system, we will process the images in batch
-    # (this batch is different from the batch when doing the model encoding)
-    # num_batch = math.ceil(len(img_names) / IMAGE_BATCH_SIZE)
-
-    # for i in range(0, len(img_names), IMAGE_BATCH_SIZE):
-    #     print("BATCH", i // IMAGE_BATCH_SIZE + 1, "OF", num_batch)
-    #     batch_imgs = img_names[i: i + IMAGE_BATCH_SIZE]
-    #     img_embs = model.encode([Image.open(img_path + "/" + name)
-    #                             for name in batch_imgs], show_progress_bar=True)
-
-    #     # put the image id and the corresponding embedding into a dictionary
-    #     img_emb_dict.update({img_name.split(".")[0]: img_emb.tolist() for img_name,
-    #                          img_emb in zip(batch_imgs, img_embs)})
-
-    #     # Write to the given file the dictionary
-    #     with open(output_path, "w") as outfile:
-    #         json.dump(img_emb_dict, outfile)
+    
     for img_name in tqdm(img_names, desc="Encoding images", total=len(img_names)):
         image = preprocess(Image.open(img_path + img_name)).unsqueeze(0).to(device)
-        image_features = model.encode_image(image)
-        img_emb_dict[img_name.split(".")[0]] = image_features.tolist()[0]
+        with torch.no_grad():
+            image_features = model.encode_image(image)
+            img_emb_dict[img_name.split(".")[0]] = image_features.tolist()[0]
     
     with open(output_path, "w") as outfile:
         json.dump(img_emb_dict, outfile)
 
 
-def get_feedback_emb_from_query(model, query_path: str, output_path: str):
+def get_feedback_emb_from_query(model, query_path: str, feedback_output_path):
     """Generate the embeddings for the feedbacks from the query using the given model
 
     Args:
@@ -87,26 +56,16 @@ def get_feedback_emb_from_query(model, query_path: str, output_path: str):
         corresponding feedback embeddings
     """
     query_df = pd.read_json(query_path, lines=True)
-    feedbacks = []
-    source_pids = []
-    for _, row in query_df.iterrows():
-        source_pids.append(row['source_pid'])
-        feedbacks.append(row['feedback1'])
-        feedbacks.append(row['feedback2'])
-        feedbacks.append(row['feedback3'])
-    feedback_embs = model.encode(feedbacks, show_progress_bar=True)
-
     feedback_emb_dict = {}
-    for i, pid in enumerate(source_pids):
-        feedback1 = feedback_embs[3 * i]
-        feedback2 = feedback_embs[3 * i]
-        feedback3 = feedback_embs[3 * i + 2]
+    for _, row in tqdm(query_df.iterrows(), "Processing Feedback", total=len(query_df)):
+        pid = row['source_pid']
+        text = clip.tokenize([row['feedback1'], row['feedback2'], row['feedback3']]).to(device)
+        with torch.no_grad():
+            text_features = model.encode_text(text)
+            feedback_emb_dict[pid] = sum(text_features).tolist()
 
-        # Adding all the feedback embeddings together
-        feedback_emb = feedback1 + feedback2 + feedback3
-        feedback_emb_dict[pid] = feedback_emb
-
-    return feedback_emb_dict
+    with open(feedback_output_path, "w") as outfile:
+        json.dump(feedback_emb_dict, outfile)
 
 def generate_embs(agrs):
     if args.model == "base":
@@ -124,7 +83,10 @@ def generate_embs(agrs):
 
 
     model, preprocess = clip.load(model_name, device = device, jit=False) #Must set jit=False for training
-    checkpoint = torch.load("results/models/finetuned/model_epoch31_20221205-133726.pt")
+    # epoch1 = "results/models/finetuned/model_epoch1_20221205-123340.pt"
+    # epoch31 = "results/models/finetuned/model_epoch31_20221205-133726.pt"
+    epoch16 = "models/finetuned/model_epoch16_20221206-174028.pt"
+    checkpoint = torch.load(epoch16)
     model.load_state_dict(checkpoint['model_state_dict'])
     
     if args.query:
@@ -133,16 +95,20 @@ def generate_embs(agrs):
             os.mkdir(result_folder)
 
         img_path = "images/query/"
-        img_embs_path = f"{result_folder}img_embs_{version}_finetune_512.jsonl"
+        img_embs_path = f"{result_folder}img_embs_{version}_clip_finetune_512_epoch_16.jsonl"
         print("Generating query images embeddings...")
-        # image = preprocess(Image.open(img_path + "21-cdT54ZSL.jpg")).unsqueeze(0).to(device)
-        # image_features = model.encode_image(image)
-        # print(len(image_features.tolist()[0]))
+        get_img_emb(model, preprocess, img_path, img_embs_path)
+        print("DONE!, embeddings are in", img_embs_path)
 
-    get_img_emb(model, preprocess, img_path, img_embs_path)
-    print("DONE!, embeddings are in", img_embs_path)
-
-
+    if args.feedback:
+        result_folder = "results/query/"
+        if not os.path.exists(result_folder):
+            os.mkdir(result_folder)
+        feedback_embs_path = f"{result_folder}feedback_embs_{version}_clip_finetune_512_epoch_16.jsonl"
+        print("Generating query feedback embeddings...")
+        get_feedback_emb_from_query(model, PATH_QUERY_FILE, feedback_embs_path)
+        print("DONE!, embeddings are in", feedback_embs_path)
+        
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Generate image embeddings')
     parser.add_argument('--annotation', action="store_true")
@@ -150,5 +116,6 @@ if __name__ == "__main__":
     parser.add_argument('--gallery', action="store_true")
     parser.add_argument('--model', type=str, default="base")
     parser.add_argument('--models', action="store_true")
+    parser.add_argument('--feedback', action="store_true")
     args = parser.parse_args()
     generate_embs(args)

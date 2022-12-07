@@ -3,15 +3,17 @@ import torch
 from torch import nn, optim
 import clip
 from torch.utils.data import DataLoader
+import torch.nn.functional as func
 from datasets import Dataset
 from PIL import Image
 import pandas as pd
 import tqdm
 import time
+import json
 
 PATH_IMAGES_ANNOTATION = './images/annotation/'
 PATH_APPAREL_TRAIN_ANNOTATION = './dataset/apparel_train_annotation.csv'
-PATH_SAVE_MODEL = '.models/finetuned/'
+PATH_SAVE_MODEL = './models/finetuned/'
 
 # missing_img_targets = set()
 
@@ -88,7 +90,7 @@ def get_image_text_dataset(annotation_path, annotation_images_path):
     #         missing_img_targets.add(target_id)
     # print("Finished adding target training images...")
 
-    print(len(num_missing_annotation),
+    print(num_missing_annotation,
           "corrupted annotations (missing src, target or non target images)")
 
     return Annotation(sources, feedbacks, targets, non_targets)
@@ -104,12 +106,13 @@ def finetune(dataset, path_save_model, train_batch_size=2, num_epochs=1):
     else:
         clip.model.convert_weights(model)
 
-    loss_func = nn.CrossEntropyLoss()
+    loss_func = nn.MSELoss()
 
     # Params used from paper, the lr is smaller, more safe for fine tuning to new dataset
     optimizer = optim.Adam(model.parameters(), lr=5e-5,
                            betas=(0.9, 0.98), eps=1e-6, weight_decay=0.2)
 
+    graph = []
     for epoch in range(num_epochs):
         with tqdm.tqdm(train_dataloader, unit="batch") as tepoch:
             for sources, feedbacks, targets, non_targets in tepoch:
@@ -125,10 +128,13 @@ def finetune(dataset, path_save_model, train_batch_size=2, num_epochs=1):
                 # logits_per_image, logits_per_text = model(images, texts)
                 sources_embs = model.encode_image(sources)
                 feedbacks_embs = model.encode_text(feedbacks)
-                targets_embs = model.encode_text(targets)
+                targets_embs = model.encode_image(targets)
 
-                ground_truth = torch.arange(
-                    len(targets), dtype=torch.long, device=device)
+                # sources_embs = func.normalize(sources_embs, p = 1, dim=1)
+                # feedbacks_embs = func.normalize(feedbacks_embs, p = 1, dim=1)
+                # targets_embs = func.normalize(targets_embs, p = 1, dim=1)
+                # ground_truth = torch.arange(
+                #     len(targets), dtype=torch.long, device=device)
 
                 # total_loss = (loss_img(logits_per_image, ground_truth) +
                 #               loss_txt(logits_per_text, ground_truth))/2
@@ -139,7 +145,7 @@ def finetune(dataset, path_save_model, train_batch_size=2, num_epochs=1):
                 if device == "cpu":
                     optimizer.step()
                 else:
-                    convert_models_to_fp32(model)
+                    # convert_models_to_fp32(model)
                     optimizer.step()
                     clip.model.convert_weights(model)
 
@@ -152,6 +158,9 @@ def finetune(dataset, path_save_model, train_batch_size=2, num_epochs=1):
                     },
                    path_save_model + "model_" + f"epoch{str(epoch)}_" + time.strftime("%Y%m%d-%H%M%S") + ".pt")
 
+        graph.append({'epoch': epoch, 'loss': total_loss.tolist()})       
+        with open("results/graph/finetune.jsonl", "w") as outfile:
+            json.dump(graph, outfile)
 
 if __name__ == "__main__":
     print('CUDA available?: ' + str(torch.cuda.is_available()))
