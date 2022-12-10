@@ -52,8 +52,8 @@ class CLIPWrapper(LightningModule):
         #     feedback_embs = [feedback_embs]
         #     tgt_embs = [tgt_embs]
 
-        logits = (torch.cat(src_embs) + torch.cat(feedback_embs)
-                  ) @ torch.cat(tgt_embs).t() * self.model.logit_scale.exp()
+        logits = (src_embs + feedback_embs
+                  ) @ tgt_embs.t() * self.model.logit_scale.exp()
         ground_truth = torch.arange(len(src_embs)).long().to(src_embs.device)
         loss = (F.cross_entropy(logits, ground_truth) +
                 F.cross_entropy(logits.t(), ground_truth)) / 2
