@@ -33,12 +33,6 @@ class CLIPWrapper(LightningModule):
     def training_step(self, batch, batch_idx):
         src, feedback, tgt, non_tgt = batch
 
-        # src_embs = [F.normalize(self.model.encode_image(s), dim=1)
-        #             for s in src]
-        # feedback_embs = [F.normalize(
-        #     self.model.encode_text(f), dim=1) for f in feedback]
-        # tgt_embs = [F.normalize(self.model.encode_image(t), dim=1) for t in tgt]
-        # non_embs = [F.normalize(self.model.encode_text(n), dim=1) for n in non_tgt]
         src_embs = F.normalize(self.model.encode_image(src), dim=1)
         feedback_embs = F.normalize(self.model.encode_text(feedback), dim=1)
         tgt_embs = F.normalize(self.model.encode_image(tgt), dim=1)
@@ -52,8 +46,7 @@ class CLIPWrapper(LightningModule):
         #     feedback_embs = [feedback_embs]
         #     tgt_embs = [tgt_embs]
 
-        logits = (src_embs + feedback_embs) @ tgt_embs.t() * \
-            self.model.logit_scale.exp()
+        logits = (src_embs + feedback_embs) @ tgt_embs.t()
         ground_truth = torch.arange(len(src_embs)).long().to(src_embs.device)
         loss = F.cross_entropy(logits, ground_truth)
         return loss
