@@ -2,7 +2,7 @@ from lightning import LightningModule
 import torch.nn.functional as F
 import clip
 import torch
-
+from torch import optim
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
@@ -46,3 +46,7 @@ class CLIPWrapper(LightningModule):
         loss = (F.cross_entropy(logits, ground_truth) +
                 F.cross_entropy(logits.t(), ground_truth)) / 2
         return loss
+
+    def configure_optimizers(self):
+        optimizer = optim.Adam(self.parameters(), lr=1e-3)
+        return optimizer
