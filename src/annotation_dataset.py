@@ -73,4 +73,5 @@ class AnnotationDataset(Dataset):
         tgt_tensor = self.preprocess(Image.open(target_path))
         non_tgt_tensor = self.preprocess(Image.open(non_target_path))
 
+        print(src_tensor.shape)
         return src_tensor, tokenized_fb, tgt_tensor, non_tgt_tensor
