@@ -39,7 +39,9 @@ class CLIPWrapper(LightningModule):
         src_embs = []
         for s in src:
             print(s.shape)
-            new_s = F.normalize(self.model.encode_image(s), dim=1)
+            encoded = self.model.encode_image(s)
+            print(encoded.shape)
+            new_s = F.normalize(encoded, dim=1)
             src_embs.append(new_s)
 
         feedback_embs = [F.normalize(
