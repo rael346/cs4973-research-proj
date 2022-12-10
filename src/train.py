@@ -12,7 +12,7 @@ if __name__ == "__main__":
 
     model = CLIPWrapper(MODEL_BASE)
     dataset = AnnotationDataset(
-        PATH_APPAREL_TRAIN_ANNOTATION, PATH_IMAGES_ANNOTATION)
+        PATH_APPAREL_TRAIN_ANNOTATION, PATH_IMAGES_ANNOTATION, MODEL_BASE)
 
     dataloader = DataLoader(dataset, batch_size=100, num_workers=24)
     trainer = Trainer(accelerator='gpu', devices=1,

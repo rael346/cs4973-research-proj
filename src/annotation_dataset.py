@@ -4,10 +4,13 @@ import pandas as pd
 import os
 import clip
 from PIL import Image
+import torch
+
+device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 
 class AnnotationDataset(Dataset):
-    def __init__(self, annotation_path, annotation_images_path):
+    def __init__(self, annotation_path, annotation_images_path, model_name):
         try:
             self.annotations = pd.read_csv(annotation_path)
         except:
@@ -19,15 +22,16 @@ class AnnotationDataset(Dataset):
                             annotation_images_path)
 
         self.images_path = annotation_images_path
-        self.image_transform = T.Compose([
-            T.Lambda(self.fix_img),
-            T.RandomResizedCrop(size=224,
-                                scale=(0.75, 1.),
-                                ratio=(1., 1.)),
-            T.ToTensor(),
-            T.Normalize((0.48145466, 0.4578275, 0.40821073),
-                        (0.26862954, 0.26130258, 0.27577711))
-        ])
+        # self.image_transform = T.Compose([
+        #     T.Lambda(self.fix_img),
+        #     T.RandomResizedCrop(size=224,
+        #                         scale=(0.75, 1.),
+        #                         ratio=(1., 1.)),
+        #     T.ToTensor(),
+        #     T.Normalize((0.48145466, 0.4578275, 0.40821073),
+        #                 (0.26862954, 0.26130258, 0.27577711))
+        # ])
+        _, self.preprocess = clip.load(model_name, device, False)
 
         self.clean_up()
 
@@ -65,8 +69,8 @@ class AnnotationDataset(Dataset):
 
         tokenized_fb = clip.tokenize(fb)[0]
 
-        src_tensor = self.image_transform(Image.open(src_path))
-        tgt_tensor = self.image_transform(Image.open(target_path))
-        non_tgt_tensor = self.image_transform(Image.open(non_target_path))
+        src_tensor = self.preprocess(Image.open(src_path))
+        tgt_tensor = self.preprocess(Image.open(target_path))
+        non_tgt_tensor = self.preprocess(Image.open(non_target_path))
 
         return src_tensor, tokenized_fb, tgt_tensor, non_tgt_tensor
