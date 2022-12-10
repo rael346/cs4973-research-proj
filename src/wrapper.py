@@ -41,6 +41,15 @@ class CLIPWrapper(LightningModule):
         tgt_embs = [F.normalize(self.model.encode_text(t), dim=1) for t in tgt]
         # non_embs = [F.normalize(self.model.encode_text(n), dim=1) for n in non_tgt]
 
+        if len(src_embs.shape) == 3:
+            src_embs = list(src_embs)
+            feedback_embs = list(feedback_embs)
+            tgt_embs = list(tgt_embs)
+        else:
+            src_embs = [src_embs]
+            feedback_embs = [feedback_embs]
+            tgt_embs = [tgt_embs]
+
         logits = (torch.cat(src_embs) + torch.cat(feedback_embs)
                   ) @ torch.cat(tgt_embs).t() * self.model.logit_scale.exp()
         ground_truth = torch.arange(len(src_embs)).long().to(src_embs.device)
