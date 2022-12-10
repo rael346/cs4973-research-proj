@@ -40,7 +40,7 @@ class CLIPWrapper(LightningModule):
         # tgt_embs = [F.normalize(self.model.encode_image(t), dim=1) for t in tgt]
         # non_embs = [F.normalize(self.model.encode_text(n), dim=1) for n in non_tgt]
         src_embs = F.normalize(self.model.encode_image(src), dim=1)
-        feedback_embs = F.normalize(self.model.encode_txt(feedback), dim=1)
+        feedback_embs = F.normalize(self.model.encode_text(feedback), dim=1)
         tgt_embs = F.normalize(self.model.encode_image(tgt), dim=1)
 
         # if len(src_embs.shape) == 3:
