@@ -15,5 +15,6 @@ if __name__ == "__main__":
         PATH_APPAREL_TRAIN_ANNOTATION, PATH_IMAGES_ANNOTATION)
 
     dataloader = DataLoader(dataset, batch_size=300)
-    trainer = Trainer(limit_train_batches=100, max_epochs=32, precision=16)
+    trainer = Trainer(accelerator='gpu', devices=1,
+                      limit_train_batches=100, max_epochs=32, precision=16)
     trainer.fit(model, dataloader)
