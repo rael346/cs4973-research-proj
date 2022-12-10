@@ -54,7 +54,7 @@ class AnnotationDataset(Dataset):
         self.annotations.drop(labels=missing_row, axis=0, inplace=True)
 
     def __getitem__(self, idx):
-        row = self.annotations[idx]
+        row = self.annotations.iloc[idx]
         src_id, tgt_id, non_tgt_id = row['Source Image ID'], row['Target Image ID'], row["Non-Target Image ID"]
         fb = " ".join(
             [row["Feedback 1"], row["Feedback 2"], row["Feedback 3"]])
