@@ -34,6 +34,9 @@ class AnnotationDataset(Dataset):
     def __len__(self):
         return len(self.annotations)
 
+    def fix_img(self, img):
+        return img.convert('RGB') if img.mode != 'RGB' else img
+
     def clean_up(self):
         missing_row = []
 
