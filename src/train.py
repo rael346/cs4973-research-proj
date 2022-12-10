@@ -16,5 +16,5 @@ if __name__ == "__main__":
 
     dataloader = DataLoader(dataset, batch_size=120, num_workers=24)
     trainer = Trainer(accelerator='gpu', devices=1,
-                      limit_train_batches=100, max_epochs=32, precision=16)
+                      limit_train_batches=100, max_epochs=32)
     trainer.fit(model, dataloader)
