@@ -33,30 +33,24 @@ class CLIPWrapper(LightningModule):
     def training_step(self, batch, batch_idx):
         src, feedback, tgt, non_tgt = batch
 
-        print(src.shape)
         # src_embs = [F.normalize(self.model.encode_image(s), dim=1)
         #             for s in src]
-        src_embs = []
-        for s in src:
-            print(s.shape)
-            encoded = self.model.encode_image(s)
-            print(encoded.shape)
-            new_s = F.normalize(encoded, dim=1)
-            src_embs.append(new_s)
-
-        feedback_embs = [F.normalize(
-            self.model.encode_text(f), dim=1) for f in feedback]
-        tgt_embs = [F.normalize(self.model.encode_text(t), dim=1) for t in tgt]
+        # feedback_embs = [F.normalize(
+        #     self.model.encode_text(f), dim=1) for f in feedback]
+        # tgt_embs = [F.normalize(self.model.encode_image(t), dim=1) for t in tgt]
         # non_embs = [F.normalize(self.model.encode_text(n), dim=1) for n in non_tgt]
+        src_embs = F.normalize(self.model.encode_image(src), dim=1)
+        feedback_embs = F.normalize(self.model.encode_txt(feedback), dim=1)
+        tgt_embs = F.normalize(self.model.encode_image(tgt), dim=1)
 
-        if len(src_embs.shape) == 3:
-            src_embs = list(src_embs)
-            feedback_embs = list(feedback_embs)
-            tgt_embs = list(tgt_embs)
-        else:
-            src_embs = [src_embs]
-            feedback_embs = [feedback_embs]
-            tgt_embs = [tgt_embs]
+        # if len(src_embs.shape) == 3:
+        #     src_embs = list(src_embs)
+        #     feedback_embs = list(feedback_embs)
+        #     tgt_embs = list(tgt_embs)
+        # else:
+        #     src_embs = [src_embs]
+        #     feedback_embs = [feedback_embs]
+        #     tgt_embs = [tgt_embs]
 
         logits = (torch.cat(src_embs) + torch.cat(feedback_embs)
                   ) @ torch.cat(tgt_embs).t() * self.model.logit_scale.exp()
