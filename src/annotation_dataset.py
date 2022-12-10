@@ -22,7 +22,7 @@ class AnnotationDataset(Dataset):
         self.image_transform = T.Compose([
             T.Lambda(self.fix_img),
             T.RandomResizedCrop(size=224,
-                                scale=(self.resize_ratio, 1.),
+                                scale=(0.75, 1.),
                                 ratio=(1., 1.)),
             T.ToTensor(),
             T.Normalize((0.48145466, 0.4578275, 0.40821073),
