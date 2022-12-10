@@ -60,5 +60,6 @@ class CLIPWrapper(LightningModule):
         return loss
 
     def configure_optimizers(self):
-        optimizer = optim.Adam(self.parameters(), lr=1e-3)
+        optimizer = optim.AdamW(self.model.parameters(), lr=5e-4,
+                                betas=(0.9, 0.98), eps=1e-6, weight_decay=0.2)
         return optimizer
