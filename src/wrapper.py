@@ -33,6 +33,7 @@ class CLIPWrapper(LightningModule):
     def training_step(self, batch, batch_idx):
         src, feedback, tgt, non_tgt = batch
 
+        print(src)
         src_embs = [F.normalize(self.model.encode_image(s), dim=1)
                     for s in src]
         feedback_embs = [F.normalize(
