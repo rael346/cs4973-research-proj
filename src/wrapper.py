@@ -34,8 +34,14 @@ class CLIPWrapper(LightningModule):
         src, feedback, tgt, non_tgt = batch
 
         print(src.shape)
-        src_embs = [F.normalize(self.model.encode_image(s), dim=1)
-                    for s in src]
+        # src_embs = [F.normalize(self.model.encode_image(s), dim=1)
+        #             for s in src]
+        src_embs = []
+        for s in src:
+            print(s.shape)
+            new_s = F.normalize(self.model.encode_image(s), dim=1)
+            src_embs.append(new_s)
+
         feedback_embs = [F.normalize(
             self.model.encode_text(f), dim=1) for f in feedback]
         tgt_embs = [F.normalize(self.model.encode_text(t), dim=1) for t in tgt]
