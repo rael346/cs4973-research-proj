@@ -14,7 +14,7 @@ if __name__ == "__main__":
     dataset = AnnotationDataset(
         PATH_APPAREL_TRAIN_ANNOTATION, PATH_IMAGES_ANNOTATION, MODEL_BASE)
 
-    dataloader = DataLoader(dataset, batch_size=300, num_workers=24)
+    dataloader = DataLoader(dataset, batch_size=120, num_workers=24)
     trainer = Trainer(accelerator='gpu', devices=1,
                       limit_train_batches=100, max_epochs=32, precision=16)
     trainer.fit(model, dataloader)
