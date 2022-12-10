@@ -9,6 +9,7 @@ device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 class CLIPWrapper(LightningModule):
     def __init__(self, model_name: str) -> None:
+        super().__init__()
         self.model, self.preprocess = clip.load(model_name, device, False)
 
     # Sourced from https://github.com/PyTorchLightning/pytorch-lightning/issues/5449
