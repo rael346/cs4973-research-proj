@@ -10,6 +10,18 @@ if __name__ == "__main__":
     MODEL_MEDIUM = 'ViT-B/16'
     MODEL_LARGE = 'ViT-L/14'
 
+    # regular Adam optimizer, mapping feedback to target image
+    # adam_w, loss_func = False, 0
+    
+    # AdamW optimizer, mapping feedback = target image
+    # adam_w, loss_func = True, 0
+    
+    # regular Adam optimizer, mapping src + feedback = target
+    # adam_w, loss_func = False, 1
+    
+    # AdamW optimizer, mapping src + feedback = target
+    adam_w, loss_func = True, 1
+    
     model = CLIPWrapper(MODEL_BASE)
     dataset = AnnotationDataset(
         PATH_APPAREL_TRAIN_ANNOTATION, PATH_IMAGES_ANNOTATION, MODEL_BASE)

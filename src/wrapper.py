@@ -1,16 +1,20 @@
 from lightning import LightningModule
 import torch.nn.functional as F
+import torch.nn as nn
 import clip
 import torch
 from torch import optim
+from cosine_annealing_warmup import CosineAnnealingWarmupRestarts
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 
 class CLIPWrapper(LightningModule):
-    def __init__(self, model_name: str) -> None:
+    def __init__(self, model_name: str, adam_w: bool = False, loss_func: int = 0) -> None:
         super().__init__()
         self.model, self.preprocess = clip.load(model_name, device, False)
+        self.adam_w = adam_w
+        self.loss_func = loss_func
 
     # Sourced from https://github.com/PyTorchLightning/pytorch-lightning/issues/5449
     @property
@@ -32,33 +36,33 @@ class CLIPWrapper(LightningModule):
 
     def training_step(self, batch, batch_idx):
         src, feedback, tgt, non_tgt = batch
-
-        # src_embs = [F.normalize(self.model.encode_image(s), dim=1)
-        #             for s in src]
-        # feedback_embs = [F.normalize(
-        #     self.model.encode_text(f), dim=1) for f in feedback]
-        # tgt_embs = [F.normalize(self.model.encode_image(t), dim=1) for t in tgt]
-        # non_embs = [F.normalize(self.model.encode_text(n), dim=1) for n in non_tgt]
-        src_embs = F.normalize(self.model.encode_image(src), dim=1)
-        feedback_embs = F.normalize(self.model.encode_text(feedback), dim=1)
-        tgt_embs = F.normalize(self.model.encode_image(tgt), dim=1)
-
-        # if len(src_embs.shape) == 3:
-        #     src_embs = list(src_embs)
-        #     feedback_embs = list(feedback_embs)
-        #     tgt_embs = list(tgt_embs)
-        # else:
-        #     src_embs = [src_embs]
-        #     feedback_embs = [feedback_embs]
-        #     tgt_embs = [tgt_embs]
-
-        logits = (src_embs + feedback_embs) @ tgt_embs.t() * \
-            self.model.logit_scale.exp()
-        ground_truth = torch.arange(len(src_embs)).long().to(src_embs.device)
-        loss = F.cross_entropy(logits, ground_truth)
+        if self.loss_func == 0:
+            logits_per_image, logits_per_text = self.model(tgt, feedback)
+            ground_truth = torch.arange(len(feedback), dtype=torch.long, device=feedback.device)
+            loss = (F.cross_entropy(logits_per_image, ground_truth) + F.cross_entropy(logits_per_text, ground_truth)) / 2
+        
+        if self.loss_func == 1:
+            src_embs = F.normalize(self.model.encode_image(src), dim=1)
+            feedback_embs = F.normalize(self.model.encode_text(feedback), dim=1)
+            tgt_embs = F.normalize(self.model.encode_image(tgt), dim=1)
+            
+            ground_truth = torch.arange(len(feedback), dtype=torch.long, device=feedback.device)
+            logits = (src_embs + feedback_embs) @ tgt_embs.t()
+            loss = (F.cross_entropy(logits, ground_truth) + F.cross_entropy(logits.t(), ground_truth)) / 2
+        
+        self.log("train_loss", loss)
+        if torch.isnan(loss).any():
+            print(loss, flush=True)
+            
         return loss
 
     def configure_optimizers(self):
+        if not self.adam_w:         
+            optimizer = optim.Adam(self.model.parameters(), lr=5e-5,
+                                    betas=(0.9, 0.98), eps=1e-6, weight_decay=0.2)
+            return optimizer
+
         optimizer = optim.AdamW(self.model.parameters(), lr=5e-4,
-                                betas=(0.9, 0.98), eps=1e-6, weight_decay=0.2)
+                        betas=(0.9, 0.98), eps=1e-6, weight_decay=0.2)
+
         return optimizer

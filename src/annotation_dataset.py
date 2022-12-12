@@ -5,6 +5,7 @@ import os
 import clip
 from PIL import Image
 import torch
+from tqdm import tqdm
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
@@ -22,15 +23,6 @@ class AnnotationDataset(Dataset):
                             annotation_images_path)
 
         self.images_path = annotation_images_path
-        # self.image_transform = T.Compose([
-        #     T.Lambda(self.fix_img),
-        #     T.RandomResizedCrop(size=224,
-        #                         scale=(0.75, 1.),
-        #                         ratio=(1., 1.)),
-        #     T.ToTensor(),
-        #     T.Normalize((0.48145466, 0.4578275, 0.40821073),
-        #                 (0.26862954, 0.26130258, 0.27577711))
-        # ])
         _, self.preprocess = clip.load(model_name, device, False)
 
         self.clean_up()
@@ -56,7 +48,7 @@ class AnnotationDataset(Dataset):
         print("Number of corrupted annotation (source, target or non target images):", len(
             missing_row))
         self.annotations.drop(labels=missing_row, axis=0, inplace=True)
-
+    
     def __getitem__(self, idx):
         row = self.annotations.iloc[idx]
         src_id, tgt_id, non_tgt_id = row['Source Image ID'], row['Target Image ID'], row["Non-Target Image ID"]
@@ -72,5 +64,5 @@ class AnnotationDataset(Dataset):
         src_tensor = self.preprocess(Image.open(src_path))
         tgt_tensor = self.preprocess(Image.open(target_path))
         non_tgt_tensor = self.preprocess(Image.open(non_target_path))
-
+        
         return src_tensor, tokenized_fb, tgt_tensor, non_tgt_tensor
