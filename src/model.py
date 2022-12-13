@@ -10,6 +10,7 @@ from sentence_transformers import util
 class Model:
     def __init__(self, model_name: str, checkpoint_path: str) -> None:
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        print("Using", model_name, "with checkpoint from", checkpoint_path)
         self.model, self.preprocess = clip.load(model_name, self.device, False)
         
         if checkpoint_path:
@@ -48,6 +49,7 @@ class Model:
 
         with open(output_path, "w") as outfile:
             json.dump(emb_dict, outfile)
+            print("Encoded query saved to", output_path)
             
     def encode_gallery(self, gallery_path: str, output_path: str):
         img_names = os.listdir(gallery_path)
@@ -61,6 +63,7 @@ class Model:
         
         with open(output_path, "w") as outfile:
             json.dump(img_emb_dict, outfile)
+            print("Encoded gallery saved to", output_path)
             
     def calculate_rankings(self, query_path: str, query_embs_path: str, encoded_gallery_path: str, output_path: str):
         # read the query file and create a copy of it for appending the score
@@ -102,3 +105,4 @@ class Model:
         # return query_df_scored
         query_df_scored.to_json(path_or_buf=output_path,
                                 orient='records', lines=True)
+        print("Query rankings saved to", output_path)
