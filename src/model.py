@@ -30,10 +30,10 @@ class Model:
         for _, row in tqdm(query_df.iterrows(), "Query calculated", total=len(query_df)):
             pid = row['source_pid']
             source_img_emb = img_embs.get(pid, None)
-            # fb = " ".join([row["feedback1"], row["feedback2"], row["feedback3"]])
-            # text = clip.tokenize(fb).to(self.device)
+            fb = " ".join([row["feedback1"], row["feedback2"], row["feedback3"]])
+            text = clip.tokenize(fb).to(self.device)
             
-            text = clip.tokenize([row['feedback1'], row['feedback2'], row['feedback3']]).to(self.device)
+            # text = clip.tokenize([row['feedback1'], row['feedback2'], row['feedback3']]).to(self.device)
             
             if source_img_emb is None:
                 missing_img_source.add(pid)
@@ -42,8 +42,8 @@ class Model:
                     text_features = self.model.encode_text(text)
                     src_features = torch.tensor(source_img_emb).to(self.device)
                     
-                    # query_features = src_features + text_features
-                    query_features = src_features + sum(text_features)
+                    query_features = src_features + text_features
+                    # query_features = src_features + sum(text_features)
                     emb_dict[pid] = query_features[0].tolist()
 
         with open(output_path, "w") as outfile:
