@@ -2,31 +2,31 @@ from lightning import Trainer
 from torch.utils.data import DataLoader
 from wrapper import CLIPWrapper
 from annotation_dataset import AnnotationDataset
+from lightning.pytorch.callbacks import LearningRateMonitor
+import argparse
 
-if __name__ == "__main__":
-    PATH_APPAREL_TRAIN_ANNOTATION = './dataset/apparel_train_annotation.csv'
-    PATH_IMAGES_ANNOTATION = './images/annotation/'
-    MODEL_BASE = 'ViT-B/32'
-    MODEL_MEDIUM = 'ViT-B/16'
-    MODEL_LARGE = 'ViT-L/14'
+PATH_APPAREL_TRAIN_ANNOTATION = './dataset/apparel_train_annotation.csv'
+PATH_IMAGES_ANNOTATION = './images/annotation/'
+MODEL_BASE = 'ViT-B/32'
+MODEL_MEDIUM = 'ViT-B/16'
+MODEL_LARGE = 'ViT-L/14'
 
-    # regular Adam optimizer, mapping feedback to target image
-    # adam_w, loss_func = False, 0
+def train_model(adamw: bool, loss_func: int, lr: float):
+    model = CLIPWrapper(MODEL_BASE, adamw, loss_func, lr)
     
-    # AdamW optimizer, mapping feedback = target image
-    # adam_w, loss_func = True, 0
+    lr_monitor = LearningRateMonitor(logging_interval="step")
     
-    # regular Adam optimizer, mapping src + feedback = target
-    # adam_w, loss_func = False, 1
-    
-    # AdamW optimizer, mapping src + feedback = target
-    adam_w, loss_func = True, 1
-    
-    model = CLIPWrapper(MODEL_BASE)
     dataset = AnnotationDataset(
         PATH_APPAREL_TRAIN_ANNOTATION, PATH_IMAGES_ANNOTATION, MODEL_BASE)
-
-    dataloader = DataLoader(dataset, batch_size=120, num_workers=24)
-    trainer = Trainer(accelerator='gpu', devices=1,
-                      limit_train_batches=100, max_epochs=32)
+    dataloader = DataLoader(dataset, batch_size=100, num_workers=24)
+    
+    trainer = Trainer(accelerator='gpu', devices=1, max_epochs=32, callbacks=[lr_monitor])
     trainer.fit(model, dataloader)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Train model using the annotation set')
+    parser.add_argument('--adamw', action="store_true")
+    parser.add_argument('--lostfunc', type=int, required=True)
+    parser.add_argument("--lr", type=float, required=True)
+    args = parser.parse_args()
+    train_model(args.adamw, args.lostfunc, args.lr)

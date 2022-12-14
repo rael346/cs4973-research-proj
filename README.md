@@ -30,3 +30,12 @@ For bigger model,
 ```
 python3 src/generate_embs.py --query --model large
 ```
+
+version 2
+loss 1, lr = 1e-7
+
+version 3 
+incoporate logit scale
+
+version 4
+loss 0, adam optimizer lr = 1e-7
