@@ -74,14 +74,14 @@ class CLIPWrapper(LightningModule):
             optimizer = optim.Adam(self.model.parameters(), lr=self.lr,
                                         betas=(0.9, 0.98), eps=1e-6, weight_decay=0.2)
 
-        # lr_scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, 2000)
-        lr_scheduler = CosineAnnealingWarmupRestarts(
-            optimizer,
-            first_cycle_steps=self.num_training_steps,
-            cycle_mult=1.0,
-            max_lr=self.lr,
-            min_lr=0,
-            warmup_steps=2000
-        )
+        lr_scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, 2000)
+        # lr_scheduler = CosineAnnealingWarmupRestarts(
+        #     optimizer,
+        #     first_cycle_steps=self.num_training_steps,
+        #     cycle_mult=1.0,
+        #     max_lr=self.lr,
+        #     min_lr=0,
+        #     warmup_steps=2000
+        # )
 
-        return [optimizer], [{"scheduler": lr_scheduler, "interval": "epoch"}]
+        return [optimizer], [{"scheduler": lr_scheduler, "interval": "step"}]
