@@ -47,6 +47,8 @@ class Model:
                     # query_features = src_features + sum(text_features)
                     emb_dict[pid] = query_features[0].tolist()
 
+        print("Missing", len(missing_img_source), "source images")
+        print(missing_img_source)
         with open(output_path, "w") as outfile:
             json.dump(emb_dict, outfile)
             print("Encoded query saved to", output_path)
