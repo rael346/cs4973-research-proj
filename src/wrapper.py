@@ -1,10 +1,8 @@
 from lightning import LightningModule
 import torch.nn.functional as F
-import torch.nn as nn
 import clip
 import torch
 from torch import optim
-from cosine_annealing_warmup import CosineAnnealingWarmupRestarts
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 

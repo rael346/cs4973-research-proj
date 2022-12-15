@@ -1,17 +1,22 @@
 from torch.utils.data import Dataset
-from torchvision import transforms as T
 import pandas as pd
 import os
 import clip
 from PIL import Image
 import torch
-from tqdm import tqdm
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 
 class AnnotationDataset(Dataset):
-    def __init__(self, annotation_path, annotation_images_path, model_name):
+    def __init__(self, annotation_path: str, annotation_images_path: str, model_name: str):
+        """Represent the annotation dataset given by the host
+
+        Args:
+            annotation_path (str): The annotation csv file given by the host
+            annotation_images_path (str): The downloaded images folder from the csv file
+            model_name (str): The model name (use for preprocessing)
+        """
         try:
             self.annotations = pd.read_csv(annotation_path)
         except:
@@ -27,13 +32,9 @@ class AnnotationDataset(Dataset):
 
         self.clean_up()
 
-    def __len__(self):
-        return len(self.annotations)
-
-    def fix_img(self, img):
-        return img.convert('RGB') if img.mode != 'RGB' else img
-
     def clean_up(self):
+        """Remove the corrupted annotations (source, target or non-target images not in the downloaded folder)
+        """
         missing_row = []
 
         for index, row in self.annotations.iterrows():
@@ -48,6 +49,9 @@ class AnnotationDataset(Dataset):
         print("Number of corrupted annotation (source, target or non target images):", len(
             missing_row))
         self.annotations.drop(labels=missing_row, axis=0, inplace=True)
+
+    def __len__(self):
+        return len(self.annotations)
     
     def __getitem__(self, idx):
         row = self.annotations.iloc[idx]

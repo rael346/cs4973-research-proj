@@ -10,11 +10,25 @@ PATH_QUERY_FILE = './dataset/query_file_released.jsonl'
 PATH_TRAIN_GALLERY = './dataset/train_gallery_file.csv'
 
 
-def pid_to_url_filename(pid_list, output_path):
+def pid_to_url_filename(pid_list: list[str], output_path: str) -> list[str]:
+    """Convert the given source pid list to url for downloading from amazon server
+
+    Args:
+        pid_list (list[str]): The pid list 
+        output_path (str): The url path for the image
+
+    Returns:
+        list[str]: The corresponding url list for downloading
+    """
     return map(lambda pid: (f"https://m.media-amazon.com/images/I/{pid}.jpg", os.path.join(output_path, f"{pid}.jpg")), pid_list)
 
 
-def download_image(url_filename):
+def download_image(url_filename: tuple[str, str]):
+    """Download the given image from the url to the given filename
+
+    Args:
+        url_filename (tuple[str, str]): The url to download the image from and the corresponding local name
+    """
     url, filename = url_filename
 
     dir_name = os.path.dirname(filename)
@@ -28,6 +42,8 @@ def download_image(url_filename):
 
 
 def download(args):
+
+    # Download annotation file
     if args.annotation:
         annotation = pd.read_csv(PATH_APPAREL_TRAIN_ANNOTATION)
         non_targets = annotation['Non-Target Image ID']
@@ -46,6 +62,7 @@ def download(args):
 
         print("DONE!\n")
 
+    # Download query file
     if args.query:
         query = pd.read_json(PATH_QUERY_FILE, lines=True)
         candidates = query['candidates'].apply(pd.Series).stack().reset_index(
@@ -63,6 +80,7 @@ def download(args):
 
         print("DONE!\n")
 
+    # Download gallery file 
     if args.gallery:
         gallery = pd.read_csv(PATH_TRAIN_GALLERY)
         gallery_images = gallery['Image ID']

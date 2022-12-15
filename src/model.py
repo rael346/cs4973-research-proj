@@ -10,12 +10,13 @@ from sentence_transformers import util
 class Model:
     def __init__(self, model_name: str, checkpoint_path: str) -> None:
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        print("Device:", self.device)
 
         if checkpoint_path:
-            print("Using", model_name, "with checkpoint from", checkpoint_path)
+            print("Using", model_name, "with finetuning checkpoint from", checkpoint_path)
         else:
             print("Using", model_name, "with no finetuning")
-            
+
         self.model, self.preprocess = clip.load(model_name, self.device, False)
         
         if checkpoint_path:
@@ -28,6 +29,13 @@ class Model:
             self.model.load_state_dict(state_dict)
             
     def encode_query(self, encoded_gallery_path: str, query_path: str, output_path: str):
+        """Encode the query (src image + feedback) using the calculated gallery embeddings
+
+        Args:
+            encoded_gallery_path (str): The jsonl gallery embeddings for the query
+            query_path (str): The main query file
+            output_path (str): The output file for the query embeddings
+        """
         query_df = pd.read_json(query_path, lines=True)
         img_embs = pd.read_json(encoded_gallery_path, lines=True)
         emb_dict = {}
@@ -39,8 +47,6 @@ class Model:
             fb = " ".join([row["feedback1"], row["feedback2"], row["feedback3"]])
             text = clip.tokenize(fb).to(self.device)
             
-            # text = clip.tokenize([row['feedback1'], row['feedback2'], row['feedback3']]).to(self.device)
-            
             if source_img_emb is None:
                 missing_img_source.add(pid)
             else:
@@ -49,7 +55,6 @@ class Model:
                     src_features = torch.tensor(source_img_emb).to(self.device)
                     
                     query_features = src_features + text_features
-                    # query_features = src_features + sum(text_features)
                     emb_dict[pid] = query_features[0].tolist()
 
         with open(output_path, "w") as outfile:
