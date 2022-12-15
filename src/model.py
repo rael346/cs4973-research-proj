@@ -10,7 +10,12 @@ from sentence_transformers import util
 class Model:
     def __init__(self, model_name: str, checkpoint_path: str) -> None:
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
-        print("Using", model_name, "with checkpoint from", checkpoint_path)
+
+        if checkpoint_path:
+            print("Using", model_name, "with checkpoint from", checkpoint_path)
+        else:
+            print("Using", model_name, "with no finetuning")
+            
         self.model, self.preprocess = clip.load(model_name, self.device, False)
         
         if checkpoint_path:
