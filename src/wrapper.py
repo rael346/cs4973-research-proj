@@ -22,22 +22,22 @@ class CLIPWrapper(LightningModule):
         print("Using loss function:", func_name)
 
     # Sourced from https://github.com/PyTorchLightning/pytorch-lightning/issues/5449
-    @property
-    def num_training_steps(self) -> int:
-        """Total training steps inferred from datamodule and devices."""
-        dataset = self.train_dataloader()
-        if self.trainer.max_steps:
-            return self.trainer.max_steps
+    # @property
+    # def num_training_steps(self) -> int:
+    #     """Total training steps inferred from datamodule and devices."""
+    #     dataset = self.trainer
+    #     if self.trainer.max_steps:
+    #         return self.trainer.max_steps
 
-        dataset_size = len(dataset)
+    #     dataset_size = len(dataset)
 
-        num_devices = max(1, self.trainer.num_gpus, self.trainer.num_processes)
-        if self.trainer.tpu_cores:
-            num_devices = max(num_devices, self.trainer.tpu_cores)
+    #     num_devices = max(1, self.trainer.num_gpus, self.trainer.num_processes)
+    #     if self.trainer.tpu_cores:
+    #         num_devices = max(num_devices, self.trainer.tpu_cores)
 
-        effective_batch_size = dataset.batch_size * \
-            self.trainer.accumulate_grad_batches * num_devices
-        return (dataset_size // effective_batch_size) * self.trainer.max_epochs
+    #     effective_batch_size = dataset.batch_size * \
+    #         self.trainer.accumulate_grad_batches * num_devices
+    #     return (dataset_size // effective_batch_size) * self.trainer.max_epochs
 
     def training_step(self, batch, batch_idx):
         src, feedback, tgt, non_tgt = batch
