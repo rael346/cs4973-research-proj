@@ -12,6 +12,17 @@ MODEL_MEDIUM = 'ViT-B/16'
 MODEL_LARGE = 'ViT-L/14'
 
 def train_model(adamw: bool, loss_func: int, lr: float, model: str):
+    """Main training file 
+
+    Args:
+        adamw (bool): Use AdamW optimizer
+        loss_func (int): loss function to use 
+            0: feedback = target
+            1: src + feedback = target
+            2: triplet loss with non-target image (WIP)
+        lr (float): learning rate 
+        model (str): The model size 
+    """
     if model == "base":
         model_name = MODEL_BASE
     elif model == "medium":

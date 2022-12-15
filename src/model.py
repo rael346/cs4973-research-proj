@@ -8,7 +8,13 @@ from PIL import Image
 from sentence_transformers import util
 
 class Model:
-    def __init__(self, model_name: str, checkpoint_path: str) -> None:
+    def __init__(self, model_name: str, checkpoint_path: str):
+        """The main model for the challenge 
+
+        Args:
+            model_name (str): The model name
+            checkpoint_path (str): The finetuned checkpoint path for the model
+        """
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
         print("Device:", self.device)
 
@@ -32,7 +38,7 @@ class Model:
         """Encode the query (src image + feedback) using the calculated gallery embeddings
 
         Args:
-            encoded_gallery_path (str): The jsonl gallery embeddings for the query
+            encoded_gallery_path (str): The jsonl gallery embeddings for the query (gotten from self.encode_gallery())
             query_path (str): The main query file
             output_path (str): The output file for the query embeddings
         """
@@ -59,9 +65,15 @@ class Model:
 
         with open(output_path, "w") as outfile:
             json.dump(emb_dict, outfile)
-            print("Encoded query saved to", output_path)
+            print("Encoded query saved to", output_path, "\n")
             
     def encode_gallery(self, gallery_path: str, output_path: str):
+        """Encode every images in the gallery folder and output to a file
+
+        Args:
+            gallery_path (str): The gallery folder for the images
+            output_path (str): The file to output the encodings
+        """
         img_names = os.listdir(gallery_path)
         img_emb_dict = {}
         
@@ -73,9 +85,17 @@ class Model:
         
         with open(output_path, "w") as outfile:
             json.dump(img_emb_dict, outfile)
-            print("Encoded gallery saved to", output_path)
+            print("Encoded gallery saved to", output_path, "\n")
             
     def calculate_rankings(self, query_path: str, query_embs_path: str, encoded_gallery_path: str, output_path: str):
+        """Calculate the rankings for the query file 
+
+        Args:
+            query_path (str): The query jsonl file path (given by the host)
+            query_embs_path (str): The query embeddings file path (gotten from self.encode_query())
+            encoded_gallery_path (str): The jsonl gallery embeddings for the query (gotten from self.encode_gallery())
+            output_path (str): The new query file with corresponding score for each candidates
+        """
         # read the query file and create a copy of it for appending the score
         query_df = pd.read_json(query_path, lines=True)
         query_df_scored = query_df.copy(deep=True)
@@ -115,4 +135,4 @@ class Model:
         # return query_df_scored
         query_df_scored.to_json(path_or_buf=output_path,
                                 orient='records', lines=True)
-        print("Query rankings saved to", output_path)
+        print("Query rankings saved to", output_path, "\n")

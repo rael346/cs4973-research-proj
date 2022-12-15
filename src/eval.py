@@ -8,6 +8,14 @@ MODEL_LARGE = 'ViT-L/14'
 
 
 def evaluate_query(ckpt_ver: int, no_finetune: bool, model: str):
+    """Evaluate the query file using the given model size
+       NOTE: this will create a version_{num} corresponding to the checkpoint file version used in lightning_logs/
+
+    Args:
+        ckpt_ver (int): The checkpoint finetuned file for the model 
+        no_finetune (bool): No checkpoint file (create the version_{num} file in results/)
+        model (str): The model name for calculating the embeddings
+    """
     result_folder = f"results/version_{ckpt_ver}/"
 
     if not os.path.exists("results/"):

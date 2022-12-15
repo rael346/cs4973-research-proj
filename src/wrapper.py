@@ -7,7 +7,18 @@ from torch import optim
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 class CLIPWrapper(LightningModule):
-    def __init__(self, model_name: str, adam_w: bool, loss_func: int, lr: float) -> None:
+    def __init__(self, model_name: str, adam_w: bool, loss_func: int, lr: float):
+        """A wrapper around the CLIP model using Pytorch Lightning Module for training
+
+        Args:
+            model_name (str): The model size to use 
+            adam_w (bool): Use the AdamW optimizer
+            loss_func (int): The loss function to use 
+                0: feedback = target
+                1: src + feedback = target
+                2: triplet loss with non-target image (WIP)
+            lr (float): The learning rate for optimizer
+        """
         super().__init__()
         self.model, self.preprocess = clip.load(model_name, device, False)
         self.adam_w = adam_w
@@ -29,6 +40,7 @@ class CLIPWrapper(LightningModule):
             loss = (F.cross_entropy(logits_per_image, ground_truth) + F.cross_entropy(logits_per_text, ground_truth)) / 2
         
         if self.loss_func == 1:
+            # The source embeddings is source image + feedback
             src_embs = F.normalize(self.model.encode_image(src) + self.model.encode_text(feedback), dim=1)
             tgt_embs = F.normalize(self.model.encode_image(tgt), dim=1)
         
