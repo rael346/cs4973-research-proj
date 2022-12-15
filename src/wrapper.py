@@ -74,4 +74,6 @@ class CLIPWrapper(LightningModule):
             optimizer = optim.Adam(self.model.parameters(), lr=self.lr,
                                         betas=(0.9, 0.98), eps=1e-6, weight_decay=0.2)
         
-        return optimizer
+        lr_scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer)
+
+        return [optimizer], [{"scheduler": lr_scheduler, "interval": "epoch"}]
