@@ -12,6 +12,13 @@ source env/bin/activate
 pip install -r requirements.txt
 ```
 
+**Note:** For some reason the `requirements.txt` only works with Ubuntu currently, so if you encounter some errors, installing the packages manual might work
+
+```
+pip install lightning pandas sentence_transformers tensorboard
+pip install git+https://github.com/openai/CLIP.git
+```
+
 ### Download dataset image file
 
 ```
@@ -25,6 +32,8 @@ Our best model so far (mAP: 0.50)
 ```
 python3 src/train.py --lostfunc 1 --lr 1e-7
 ```
+
+For more iteration in the research, see `train_eval.sh`
 
 ### Evaluate model (generate a new query with rankings to upload on leaderboard)
 
@@ -50,4 +59,8 @@ python3 src/eval.py --nofinetune --ckpt 101
 python3 src/eval.py --ckpt 0
 ```
 
-\*For more iteration in the research, see `train_eval.sh`
+4. To see the training loss logs,
+
+```
+tensorboard --logdir lightning_logs/
+```
