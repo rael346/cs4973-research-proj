@@ -13,31 +13,14 @@ class CLIPWrapper(LightningModule):
         super().__init__()
         self.model, self.preprocess = clip.load(model_name, device, False)
         self.adam_w = adam_w
-        self.loss_func = loss_func
         self.lr = lr
+
+        self.loss_func = loss_func
         if self.loss_func == 0:
-            func_name = "mapping feedback to target image"
+            func_name = "Mpping feedback to target image"
         elif self.loss_func == 1:
-            func_name = "mapping src + feedback to target image"
-        print("Using loss function:", func_name)
-
-    # Sourced from https://github.com/PyTorchLightning/pytorch-lightning/issues/5449
-    @property
-    def num_training_steps(self) -> int:
-        """Total training steps inferred from datamodule and devices."""
-        dataset = self.train_dataloader()
-        if self.trainer.max_steps:
-            return self.trainer.max_steps
-
-        dataset_size = len(dataset)
-
-        num_devices = max(1, self.trainer.num_gpus, self.trainer.num_processes)
-        if self.trainer.tpu_cores:
-            num_devices = max(num_devices, self.trainer.tpu_cores)
-
-        effective_batch_size = dataset.batch_size * \
-            self.trainer.accumulate_grad_batches * num_devices
-        return (dataset_size // effective_batch_size) * self.trainer.max_epochs
+            func_name = "Mapping src + feedback to target image"
+        print("Using loss function:", func_name, "\n")
 
     def training_step(self, batch, batch_idx):
         src, feedback, tgt, non_tgt = batch
@@ -54,14 +37,14 @@ class CLIPWrapper(LightningModule):
             ground_truth = torch.arange(len(feedback), dtype=torch.long, device=feedback.device)
             logits = src_embs @ tgt_embs.t() * self.model.logit_scale.exp()
             loss = (F.cross_entropy(logits, ground_truth) + F.cross_entropy(logits.t(), ground_truth)) / 2
-            
+        
+        # TODO: experiment with the loss function 
         # if self.loss_func == 2:
-        #     # src_embs = F.normalize(self.model.encode_image(src), dim=1)
-        #     feedback_embs = F.normalize(self.model.encode_text(feedback), dim=1)
+        #     src_embs = F.normalize(self.model.encode_image(src) + self.model.encode_text(feedback), dim=1)
         #     tgt_embs = F.normalize(self.model.encode_image(tgt), dim=1)
         #     non_tgt_embs = F.normalize(self.model.encode_image(non_tgt), dim=1)
-            
-        #     loss = F.triplet_margin_loss(feedback_embs, tgt_embs, non_tgt_embs)
+
+        #     loss = F.triplet_margin_loss(src_embs, tgt_embs, non_tgt_embs)
         
         self.log("train_loss", loss)
         return loss

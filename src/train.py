@@ -14,13 +14,14 @@ MODEL_LARGE = 'ViT-L/14'
 def train_model(adamw: bool, loss_func: int, lr: float):
     model = CLIPWrapper(MODEL_BASE, adamw, loss_func, lr)
     
-    lr_monitor = LearningRateMonitor(logging_interval="step")
+    # lr_monitor = LearningRateMonitor(logging_interval="step")
     
     dataset = AnnotationDataset(
         PATH_APPAREL_TRAIN_ANNOTATION, PATH_IMAGES_ANNOTATION, MODEL_BASE)
     dataloader = DataLoader(dataset, batch_size=100, num_workers=24)
     
-    trainer = Trainer(accelerator='gpu', devices=1, max_epochs=32, callbacks=[lr_monitor])
+    # trainer = Trainer(accelerator='gpu', devices=1, max_epochs=32, callbacks=[lr_monitor])
+    trainer = Trainer(accelerator='gpu', devices=1, max_epochs=32)
     trainer.fit(model, dataloader)
 
 if __name__ == "__main__":
