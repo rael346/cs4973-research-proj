@@ -33,7 +33,7 @@ python3 src/train.py --lostfunc 1 --lr 1e-7
 python3 src/eval.py --ckpt 6
 
 # Test on large model 
-echo "Evaluate large model performance (no finetune)"
+echo "Evaluate large model performance (no finetune)" # Could not run because of not enough memory on GPU
 python3 src/train.py --adamw --lostfunc 1 --lr 1e-7 --model large 
 python3 src/eval.py --ckpt 7 --model large
 
